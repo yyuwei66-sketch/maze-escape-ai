@@ -10,7 +10,9 @@ using namespace std;
 const int MAP_SIZE = 30;
 const int MAX_PATH_LEN = 100;
 const int INNER_LOOP = 200;
-const string MAP_FILE_PATH = "../map/test1.txt";
+const int DFS_INITIAL_SEARCH_LIMIT = 5000000;
+const int DFS_EXTEND_SEARCH_LIMIT = 80;
+const string MAP_FILE_PATH = "../map/test2.txt";
 
 int xh,yh;
 int xm,ym;
@@ -58,60 +60,76 @@ vector<Point> nextPoints(const Point& p)
     return ans;
 }
 
-Point chooseNextPoint(const Point& now,const Point& target)
+vector<Point> orderedDfsCandidates(const Point& now,const Point& target,bool visited[MAP_SIZE][MAP_SIZE])
 {
     vector<Point> candidates;
-    vector<Point> better;
-    int nowDist=torusDistance(now,target);
-
     for(const Point& p:nextPoints(now))
     {
-        if(!available(p))continue;
+        if(!available(p)||visited[p.x][p.y])continue;
         candidates.push_back(p);
-        if(torusDistance(p,target)<nowDist)better.push_back(p);
     }
 
-    if(candidates.empty())return now;
+    if(candidates.empty())return candidates;
 
-    vector<Point>& pool=better.empty()?candidates:better;
-    uniform_int_distribution<int> pick(0,(int)pool.size()-1);
-    return pool[pick(rng)];
-}
-
-vector<Point> extendPath(vector<Point> path,const Point& target)
-{
-    while((int)path.size()<MAX_PATH_LEN&&!samePoint(path.back(),target))
+    int minDist=torusDistance(candidates[0],target);
+    for(const Point& p:candidates)
     {
-        Point nxt=chooseNextPoint(path.back(),target);
-        if(samePoint(nxt,path.back()))break;
-        path.push_back(nxt);
+        minDist=min(minDist,torusDistance(p,target));
     }
-    return path;
+
+    vector<Point> nearest;
+    vector<Point> others;
+    for(const Point& p:candidates)
+    {
+        if(torusDistance(p,target)==minDist)nearest.push_back(p);
+        else others.push_back(p);
+    }
+
+    shuffle(nearest.begin(),nearest.end(),rng);
+    shuffle(others.begin(),others.end(),rng);
+
+    nearest.insert(nearest.end(),others.begin(),others.end());
+    return nearest;
 }
 
-bool dfsInitialPath(const Point& now,const Point& target,bool visited[MAP_SIZE][MAP_SIZE],vector<Point>& path)
+bool dfsInitialPath(const Point& now,const Point& target,bool visited[MAP_SIZE][MAP_SIZE],vector<Point>& path,int& searchLeft)
 {
     if(samePoint(now,target))return true;
+    if((int)path.size()>=MAX_PATH_LEN)return false;
+    if(searchLeft<=0)return false;
 
-    vector<Point> candidates=nextPoints(now);
-    sort(candidates.begin(),candidates.end(),[&](const Point& a,const Point& b){
-        return torusDistance(a,target)<torusDistance(b,target);
-    });
+    searchLeft--;
+
+    vector<Point> candidates=orderedDfsCandidates(now,target,visited);
 
     for(const Point& nxt:candidates)
     {
-        if(!available(nxt)||visited[nxt.x][nxt.y])continue;
-
         visited[nxt.x][nxt.y]=true;
         path.push_back(nxt);
 
-        if(dfsInitialPath(nxt,target,visited,path))return true;
+        if(dfsInitialPath(nxt,target,visited,path,searchLeft))return true;
 
         path.pop_back();
         visited[nxt.x][nxt.y]=false;
     }
 
     return false;
+}
+
+vector<Point> extendPath(vector<Point> path,const Point& target)
+{
+    bool visited[MAP_SIZE][MAP_SIZE]={false};
+    vector<Point> originalPath=path;
+    int searchLeft=DFS_EXTEND_SEARCH_LIMIT;
+
+    for(const Point& p:path)
+    {
+        visited[p.x][p.y]=true;
+    }
+
+    if(dfsInitialPath(path.back(),target,visited,path,searchLeft))return path;
+
+    return originalPath;
 }
 
 vector<Point> makeInitialPath()
@@ -123,10 +141,11 @@ vector<Point> makeInitialPath()
 
     path.push_back(start);
     visited[start.x][start.y]=true;
+    int searchLeft=DFS_INITIAL_SEARCH_LIMIT;
 
-    if(dfsInitialPath(start,target,visited,path))return path;
+    if(dfsInitialPath(start,target,visited,path,searchLeft))return path;
 
-    return extendPath(path,target);
+    return path;
 }
 
 double scorePath(const vector<Point>& path)
