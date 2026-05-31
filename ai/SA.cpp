@@ -89,11 +89,44 @@ vector<Point> extendPath(vector<Point> path,const Point& target)
     return path;
 }
 
+bool dfsInitialPath(const Point& now,const Point& target,bool visited[MAP_SIZE][MAP_SIZE],vector<Point>& path)
+{
+    if(samePoint(now,target))return true;
+
+    vector<Point> candidates=nextPoints(now);
+    sort(candidates.begin(),candidates.end(),[&](const Point& a,const Point& b){
+        return torusDistance(a,target)<torusDistance(b,target);
+    });
+
+    for(const Point& nxt:candidates)
+    {
+        if(!available(nxt)||visited[nxt.x][nxt.y])continue;
+
+        visited[nxt.x][nxt.y]=true;
+        path.push_back(nxt);
+
+        if(dfsInitialPath(nxt,target,visited,path))return true;
+
+        path.pop_back();
+        visited[nxt.x][nxt.y]=false;
+    }
+
+    return false;
+}
+
 vector<Point> makeInitialPath()
 {
     vector<Point> path;
-    path.push_back({xm,ym});
-    return extendPath(path,{xh,yh});
+    Point start={xm,ym};
+    Point target={xh,yh};
+    bool visited[MAP_SIZE][MAP_SIZE]={false};
+
+    path.push_back(start);
+    visited[start.x][start.y]=true;
+
+    if(dfsInitialPath(start,target,visited,path))return path;
+
+    return extendPath(path,target);
 }
 
 double scorePath(const vector<Point>& path)
@@ -165,8 +198,20 @@ vector<Point> simulatedAnnealing()
 
 void printMap(const vector<Point>& path)
 {
-    bool onPath[MAP_SIZE][MAP_SIZE]={false};
-    for(const Point& p:path)onPath[p.x][p.y]=true;
+    int stepMap[MAP_SIZE][MAP_SIZE];
+    for(int i=0;i<MAP_SIZE;i++)
+    {
+        for(int j=0;j<MAP_SIZE;j++)
+        {
+            stepMap[i][j]=-1;
+        }
+    }
+
+    for(int i=0;i<(int)path.size();i++)
+    {
+        const Point& p=path[i];
+        if(stepMap[p.x][p.y]==-1)stepMap[p.x][p.y]=i;
+    }
 
     for(int i=0;i<MAP_SIZE;i++)
     {
@@ -175,7 +220,7 @@ void printMap(const vector<Point>& path)
             if(mp[i][j])cout<<"#";
             else if(i==xh&&j==yh)cout<<"H";
             else if(i==xm&&j==ym)cout<<"M";
-            else if(onPath[i][j])cout<<"*";
+            else if(stepMap[i][j]!=-1)cout<<stepMap[i][j]%10;
             else cout<<" ";
         }
         cout<<endl;
