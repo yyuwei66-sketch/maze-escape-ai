@@ -161,9 +161,9 @@ vector<Point> mutatePath(const vector<Point>& path)
     return extendPath(nextPath,{xh,yh});
 }
 
-vector<Point> simulatedAnnealing()
+vector<Point> simulatedAnnealing(const vector<Point>& initialPath)
 {
-    vector<Point> current=makeInitialPath();
+    vector<Point> current=initialPath;
     vector<Point> best=current;
     double currentScore=scorePath(current);
     double bestScore=currentScore;
@@ -258,7 +258,12 @@ int main()
     fin>>xh>>yh;//human
     fin>>xm>>ym;//monster
 
-    vector<Point> path=simulatedAnnealing();
+    vector<Point> dfsPath=makeInitialPath();
+    cout<<"DFS result:"<<endl;
+    printMap(dfsPath);
+
+    cout<<endl<<"SA result:"<<endl;
+    vector<Point> path=simulatedAnnealing(dfsPath);
     printMap(path);
 
     return 0;
