@@ -251,20 +251,18 @@ def get_valid_spawn_points(grid, min_dist=10, max_dist=25):
 
     return random.choice(floor_cells), random.choice(floor_cells)
 
-def save_map(grid, file_path="data/generated_map.json"):
+
+def save_map_to_txt(grid, file_path="data/generated_map.txt"):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("[\n")
-        for i, row in enumerate(grid):
-            row_text = "    " + json.dumps(row, separators=(",", ":"))
-            if i < len(grid) - 1:
-                row_text += ","
-            f.write(row_text + "\n")
-        f.write("]\n")
+        for row in grid:
+            line = " ".join(str(cell) for cell in row)
+            f.write(line + "\n")
 
-    print(f"Map saved to: {file_path}")
+    print(f"TXT map saved to: {file_path}")
     
+
 def print_map(grid):
     for row in grid:
         line = ""
@@ -279,20 +277,20 @@ def print_map(grid):
 
 
 if __name__ == "__main__":
-    game_map = generate_map_ga(
+    generated_map = generate_map_ga(
         pop_size=30,
         generations=20,
         mutation_rate=0.01,
         elite_num=5
     )
 
-    print_map(game_map)
-    print("Final fitness:", fitness(game_map))
+    print_map(generated_map)
+    print("Fitness:", fitness(generated_map))
 
-    human_pos, monster_pos = get_valid_spawn_points(game_map)
+    human_pos, monster_pos = get_valid_spawn_points(generated_map)
 
     print("Human spawn:", human_pos)
     print("Monster spawn:", monster_pos)
-    print("Spawn distance:", bfs_distance(human_pos, monster_pos, game_map))
+    print("Spawn distance:", bfs_distance(human_pos, monster_pos, generated_map))
 
-    save_map(game_map)
+    save_map_to_txt(generated_map, "map/generated_map.txt")
