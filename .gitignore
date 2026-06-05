@@ -1,5 +1,6 @@
 .DS_Store
 .vscode/
+map/generated_map.txt
 .dSYM
 ai/bfs_escape.dSYM
 ai/bfs_escape
