@@ -70,20 +70,32 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(data["step_count"], 1)
 
-    def test_chase_move_uses_two_monster_steps_and_bfs_human(self):
+    def test_chase_move_renders_each_monster_step_before_bfs_human(self):
         response = self.make_game({"mode": "chase"})
         game_id = response.get_json()["game_id"]
 
         with patch("main.run_cpp_map_algorithm", return_value=((0, 29), (0, 3))):
-            move = self.client.post(
+            first = self.client.post(
                 f"/api/games/{game_id}/move",
-                json={"directions": ["left", "left"]},
+                json={"direction": "left"},
+            )
+            second = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "left"},
             )
 
-        self.assertEqual(move.status_code, 200)
-        data = move.get_json()
+        self.assertEqual(first.status_code, 200)
+        first_data = first.get_json()
+        self.assertEqual(first_data["monsters"], [{"row": 0, "col": 4}])
+        self.assertEqual(first_data["human"], {"row": 0, "col": 0})
+        self.assertEqual(first_data["pending_monster_steps"], 1)
+        self.assertEqual(first_data["step_count"], 0)
+
+        self.assertEqual(second.status_code, 200)
+        data = second.get_json()
         self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(data["human"], {"row": 0, "col": 29})
+        self.assertEqual(data["pending_monster_steps"], 0)
         self.assertEqual(data["step_count"], 1)
 
     def test_astar_two_monster_creation(self):

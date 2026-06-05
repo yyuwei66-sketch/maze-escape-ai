@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <vector>
+#include <random>
 using namespace std;
 const string MAP_FILE_PATH="../map/generated_map.txt";
 const string OUTPUT_FILE_PATH="../map/generated_map.txt";
@@ -99,10 +101,18 @@ int main()
         }
         fout<<endl;
     }
-    if(down==d_max)fout<<wrap(xh+1)<<" "<<yh<<endl;
-    else if(up==d_max)fout<<wrap(xh-1)<<" "<<yh<<endl;
-    else if(right==d_max)fout<<xh<<" "<<wrap(yh+1)<<endl;
-    else fout<<xh<<" "<<wrap(yh-1)<<endl;
+
+    vector<pair<int,int>> bestMoves;
+    if(down==d_max)bestMoves.push_back({wrap(xh+1),yh});
+    if(up==d_max)bestMoves.push_back({wrap(xh-1),yh});
+    if(right==d_max)bestMoves.push_back({xh,wrap(yh+1)});
+    if(left==d_max)bestMoves.push_back({xh,wrap(yh-1)});
+
+    random_device rd;
+    mt19937 rng(rd());
+    uniform_int_distribution<int> pick(0,(int)bestMoves.size()-1);
+    pair<int,int> nextHuman=bestMoves[pick(rng)];
+    fout<<nextHuman.first<<" "<<nextHuman.second<<endl;
 
     fout<<xm<<" "<<ym;
     return 0;

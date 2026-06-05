@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence, Tuple
-import random
 import uuid
 
 from flask import Flask, jsonify, request
 
 from ai import (
     CppAlgorithmError,
-    HEIGHT,
-    WIDTH,
     astar,
     generate_map_ga,
     get_approx_torus_spawn_points,
@@ -20,7 +17,6 @@ from ai import (
     many_xy_to_row_col,
     run_cpp_map_algorithm,
     walls_from_grid,
-    xy_to_row_col,
 )
 
 Pos = Tuple[int, int]
@@ -46,6 +42,7 @@ class GameState:
     mode: str
     opponent_ai: str
     step_count: int = 0
+    pending_monster_steps: int = 0
     status: str = "running"
     message: str = ""
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -59,6 +56,7 @@ class GameState:
             "mode": self.mode,
             "opponent_ai": self.opponent_ai,
             "step_count": self.step_count,
+            "pending_monster_steps": self.pending_monster_steps,
             "status": self.status,
             "message": self.message,
             "height": len(self.grid),
@@ -186,19 +184,18 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
         if not catches_human(game):
             game.monsters = move_monsters(game)
     else:
-        directions = payload.get("directions")
-        if directions is None and "direction" in payload:
-            directions = [payload["direction"]]
-        if not isinstance(directions, list) or len(directions) != 2:
-            raise ValueError("chase mode requires exactly two directions")
-        monster = game.monsters[0]
-        for direction in directions:
-            monster = move_one(game.grid, monster, str(direction).lower())
-            game.monsters[0] = monster
-            if catches_human(game):
-                break
-        if not catches_human(game):
+        direction = str(payload.get("direction", "")).lower()
+        game.monsters[0] = move_one(game.grid, game.monsters[0], direction)
+        game.pending_monster_steps += 1
+        if catches_human(game):
+            game.step_count += 1
+            game.pending_monster_steps = 0
+        elif game.pending_monster_steps >= 2:
             game.human = move_human_with_bfs(game)
+            game.step_count += 1
+            game.pending_monster_steps = 0
+        update_status(game)
+        return
 
     game.step_count += 1
     update_status(game)
@@ -474,7 +471,7 @@ INDEX_HTML = """<!doctype html>
       <button id="start-escape">Start escape</button>
 
       <h2>Chase mode</h2>
-      <p class="meta">You control the monster for two steps. Human uses BFS.</p>
+      <p class="meta">You control the monster one step at a time. Human uses BFS after every two monster steps.</p>
       <button id="start-chase">Start chase</button>
 
       <h2>Move</h2>
@@ -492,7 +489,6 @@ INDEX_HTML = """<!doctype html>
   </main>
   <script>
     let game = null;
-    let chaseBuffer = [];
     const board = document.getElementById("board");
     const meta = document.getElementById("meta");
 
@@ -511,26 +507,15 @@ INDEX_HTML = """<!doctype html>
         body: JSON.stringify(body)
       });
       game = await response.json();
-      chaseBuffer = [];
       render();
     }
 
     async function move(direction) {
       if (!game || game.status !== "running") return;
-      let body;
-      if (game.mode === "chase") {
-        chaseBuffer.push(direction);
-        meta.textContent = `Chase move ${chaseBuffer.length}/2`;
-        if (chaseBuffer.length < 2) return;
-        body = { directions: chaseBuffer };
-        chaseBuffer = [];
-      } else {
-        body = { direction };
-      }
       const response = await fetch(`/api/games/${game.game_id}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ direction })
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -557,7 +542,10 @@ INDEX_HTML = """<!doctype html>
           board.appendChild(cell);
         }
       }
-      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count} | ${game.status}${game.message ? " | " + game.message : ""}`;
+      const pending = game.mode === "chase" && game.status === "running"
+        ? ` | monster step: ${game.pending_monster_steps}/2`
+        : "";
+      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count}${pending} | ${game.status}${game.message ? " | " + game.message : ""}`;
     }
 
     document.getElementById("start-escape").addEventListener("click", () => startGame("escape"));

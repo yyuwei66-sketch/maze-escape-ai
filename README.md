@@ -50,8 +50,9 @@ Present but still empty / placeholder:
   once. A* single-monster mode advances up to two steps; A* two-monster mode
   moves one monster as a chaser and one as an interceptor; Greedy, Minimax, and
   Simulated Annealing use their controller output for the turn.
-- In chase mode, the player-controlled monster moves two manual steps, then the
-  BFS-controlled human moves one step.
+- In chase mode, the player-controlled monster moves one manual step per input
+  and the UI updates immediately. After two monster inputs, the BFS-controlled
+  human moves one step.
 - The game has no fixed exit tile. The score is the number of interactions
   before the monster catches the human.
 
@@ -244,8 +245,8 @@ The page has two entry points:
 
 - Escape mode: choose a monster AI (`astar`, `greedy`, `minimax`, or `sa`) and
   move the human with arrow keys or the direction buttons.
-- Chase mode: control the monster with two directions per interaction; the
-  human responds with BFS.
+- Chase mode: control the monster one direction at a time; the human responds
+  with BFS after every two monster moves.
 
 Each new game generates a fresh 30 x 30 map with:
 
@@ -297,12 +298,15 @@ Move in chase mode:
 ```bash
 curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
   -H 'Content-Type: application/json' \
-  -d '{"directions":["left","left"]}'
+  -d '{"direction":"left"}'
 ```
 
-Valid directions are `up`, `down`, `left`, and `right`. Invalid directions,
-wall collisions, moves after the game ends, and unknown `game_id` values return
-JSON errors.
+In chase mode, each successful request immediately returns the monster's updated
+position. The response includes `pending_monster_steps`; when it reaches the
+second monster step, the backend runs BFS for the human and resets the pending
+counter. Valid directions are `up`, `down`, `left`, and `right`. Invalid
+directions, wall collisions, moves after the game ends, and unknown `game_id`
+values return JSON errors.
 
 ## Running Tests
 
