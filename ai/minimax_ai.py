@@ -1,36 +1,3 @@
-"""
-minimax_ai.py
-=============
-Minimax (alpha-beta) monster pursuit AI for a toroidal grid game.
-
-Monsters are the MINimising player; the human is the MAXimising player.
-A "round" = each monster moves `steps_per_turn` cells, then the human
-moves once.  Multiple monsters are searched sequentially so earlier
-monsters' moves are visible to later ones (emergent coordination).
-
-Optimisations: alpha-beta pruning, move ordering, transposition table,
-cached BFS distance fields.
-
-INTEGRATION
------------
-    from minimax_ai import make_minimax_controller
-
-    ctrl = make_minimax_controller(
-        walls=set_of_blocked_cells,
-        width=30, height=30,
-        steps_per_turn=2,
-        depth=2,            # look-ahead in rounds
-    )
-
-    # Each game turn, AFTER the player has moved one cell:
-    paths = ctrl.decide(player_pos, monster_positions)
-    #   player_pos        : (x, y)
-    #   monster_positions : [(x, y), ...]
-    #   paths             : [[(x,y), ...], ...]
-    #                       paths[i] is monster i's route this turn.
-    #                       The new position is paths[i][-1].
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -48,9 +15,6 @@ __all__ = ["TorusGrid", "MinimaxMonsterAI", "make_minimax_controller",
            "make_minimax_controller_from_map", "pick_monster_spawns"]
 
 
-# ======================================================================
-#  Grid
-# ======================================================================
 class TorusGrid:
     """A fixed wrap-around grid with obstacles."""
 
@@ -121,9 +85,6 @@ class TorusGrid:
         return dx + dy
 
 
-# ======================================================================
-#  Minimax AI
-# ======================================================================
 class MinimaxMonsterAI:
     """Adversarial alpha-beta search for monster pursuit."""
 
@@ -268,9 +229,6 @@ class MinimaxMonsterAI:
         return paths
 
 
-# ======================================================================
-#  Factory
-# ======================================================================
 def make_minimax_controller(walls: Iterable[Pos] = (),
                             width: int = 30, height: int = 30,
                             steps_per_turn: int = 2, depth: int = 2,
@@ -283,14 +241,6 @@ def make_minimax_controller(walls: Iterable[Pos] = (),
                             monster_can_stay=monster_can_stay)
 
 
-# ======================================================================
-#  Genetic-map integration
-# ======================================================================
-#
-# The map comes from the team's genetic_map.py.  Its load_map_txt() already
-# returns walls and spawns in THIS module's convention -- (x, y) = (col, row),
-# 0 = floor, 1 = wall -- so they drop straight in.  Use the helpers below and
-# you never have to touch coordinates by hand.
 
 import os
 
@@ -317,13 +267,13 @@ def pick_monster_spawns(grid: TorusGrid, player_pos: Pos, count: int,
     if count <= 0:
         return []
     rng = rng or random.Random()
-    field = grid.distance_field(player_pos)          # -1 == unreachable
+    field = grid.distance_field(player_pos)         
     taken = {player_pos, *exclude}
     free = [grid.coord(i) for i in range(grid.n)
             if not grid.blocked[i] and grid.coord(i) not in taken]
     rng.shuffle(free)
     chosen: List[Pos] = []
-    for c in free:                                   # reachable + far + spread
+    for c in free:                                   
         if field[grid.index(c)] >= min_dist and all(
                 grid.toroidal_manhattan(c, o) >= 3 for o in chosen):
             chosen.append(c)
@@ -334,7 +284,7 @@ def pick_monster_spawns(grid: TorusGrid, player_pos: Pos, count: int,
             chosen.append(c)
             if len(chosen) == count:
                 return chosen
-    for c in free:                                   # anything (disconnected map)
+    for c in free:                                 
         if c not in chosen:
             chosen.append(c)
             if len(chosen) == count:
@@ -365,9 +315,6 @@ def make_minimax_controller_from_map(map_path=None, steps_per_turn: int = 2,
     return ctrl, spawns
 
 
-# ----------------------------------------------------------------------
-#  Self-test: run the minimax monsters on the real GA map vs a fleeing human
-# ----------------------------------------------------------------------
 if __name__ == "__main__":
     import time
     NUM_MONSTERS = 2
