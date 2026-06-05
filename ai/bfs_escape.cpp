@@ -6,6 +6,7 @@
 #include <string>
 using namespace std;
 const string MAP_FILE_PATH="../map/generated_map.txt";
+const string OUTPUT_FILE_PATH="../map/generated_map.txt";
 int xh,yh;
 int xm,ym;
 bool mp[30][30];//true if unavailable, false if available, read from file
@@ -82,11 +83,27 @@ int main()
     int right=dis[xh][wrap(yh+1)];
     int left=dis[xh][wrap(yh-1)];
 
-    int d_max=max(down,max(up,max(right,left)));
-    if(down==d_max)cout<<1<<" "<<0<<endl;
-    else if(up==d_max)cout<<-1<<" "<<0<<endl;
-    else if(right==d_max)cout<<0<<" "<<1<<endl;
-    else cout<<0<<" "<<-1<<endl;
+    ofstream fout(OUTPUT_FILE_PATH);
+    if(!fout)
+    {
+        cerr<<"Cannot open output file. Please set OUTPUT_FILE_PATH in bfs_escape.cpp."<<endl;
+        return 1;
+    }
 
+    int d_max=max(down,max(up,max(right,left)));
+    for(int i=0;i<30;i++)
+    {
+        for(int j=0;j<30;j++)
+        {
+            fout<<mp[i][j]<<" ";
+        }
+        fout<<endl;
+    }
+    if(down==d_max)fout<<wrap(xh+1)<<" "<<yh<<endl;
+    else if(up==d_max)fout<<wrap(xh-1)<<" "<<yh<<endl;
+    else if(right==d_max)fout<<xh<<" "<<wrap(yh+1)<<endl;
+    else fout<<xh<<" "<<wrap(yh-1)<<endl;
+
+    fout<<xm<<" "<<ym;
     return 0;
 }
