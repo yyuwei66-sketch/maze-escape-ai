@@ -259,7 +259,7 @@ def get_valid_spawn_points(grid, min_dist=10, max_dist=25):
     return random.choice(floor_cells), random.choice(floor_cells)
 
 
-def get_approx_torus_spawn_points(grid, target_dist=20, attempts=5000):
+def get_approx_torus_spawn_points(grid, target_dist=30, attempts=5000):
     floor_cells = get_floor_cells(grid)
 
     if len(floor_cells) < 2:
