@@ -5,15 +5,21 @@ Artificial Intelligence group project. The project explores pathfinding,
 search, and optimization algorithms on a 30 x 30 wrap-around maze, where a human
 tries to escape and a monster tries to catch the human.
 
-The repository currently contains the AI algorithm modules, generated map data,
-basic test code, font assets, and a LaTeX project report. A complete playable
-game loop / UI entry point is not present yet, so this README describes the
-implemented files as they exist in the repository today.
+The repository currently contains the AI algorithm modules, a Flask backend,
+a small browser-playable UI, generated map data, API tests, font assets, and a
+LaTeX project report.
 
 ## Current Status
 
 Implemented:
 
+- Flask game backend and minimal playable web UI in `main.py`
+- In-memory multi-game sessions addressed by `game_id`
+- Escape mode, where the player controls the human and the monster is controlled
+  by A*, Greedy, Minimax, or Simulated Annealing
+- Chase mode, where the player controls the monster and the human is controlled
+  by BFS escape
+- Public AI package facade and C++ algorithm adapters in `ai/__init__.py`
 - Genetic Algorithm map generation in `ai/genetic_map.py`
 - A* monster pathfinding in `ai/astar.py`
 - BFS-based human escape step selection in `ai/bfs_escape.cpp`
@@ -21,7 +27,7 @@ Implemented:
 - Greedy multi-monster chase controller in `ai/greedy.py`
 - Minimax multi-monster chase controller in `ai/minimax.py`
 - Generated map file in `map/generated_map.txt`
-- Basic Genetic Algorithm smoke test in `tests/test_genetic_map.py`
+- Flask API test-client coverage in `tests/test_flask_game.py`
 - Project report source and PDF in `paper/`
 
 Present but still empty / placeholder:
@@ -36,11 +42,18 @@ Present but still empty / placeholder:
 - `0` means a walkable floor cell.
 - `1` means a wall.
 - Movement uses four directions: up, down, left, and right.
+- `stay` is not allowed by the Flask game API.
 - The grid wraps around at the boundary. For example, moving left from column
   `0` enters column `29`.
-- The human moves one step per turn.
-- The monster movement modules are designed around the monster moving up to two
-  steps per turn.
+- Public API coordinates are returned as objects: `{"row": 12, "col": 8}`.
+- In escape mode, the human moves one step, then the selected monster AI runs
+  once. A* single-monster mode advances up to two steps; A* two-monster mode
+  moves one monster as a chaser and one as an interceptor; Greedy, Minimax, and
+  Simulated Annealing use their controller output for the turn.
+- In chase mode, the player-controlled monster moves two manual steps, then the
+  BFS-controlled human moves one step.
+- The game has no fixed exit tile. The score is the number of interactions
+  before the monster catches the human.
 
 ## Algorithms
 
@@ -79,11 +92,18 @@ Important functions:
 position, and chooses the adjacent human move with the largest distance from the
 monster. It writes the updated human position back to the map file.
 
+The Flask backend uses this algorithm only in chase mode. It runs the executable
+through a temporary map file so the repository's `map/generated_map.txt` is not
+mutated during web play.
+
 ### Simulated Annealing Monster Movement
 
 `ai/SA.cpp` reads `map/generated_map.txt`, builds an initial path from the
 monster to the human, improves that path with Simulated Annealing, and writes the
 monster's moved position back to the map file.
+
+The Flask backend exposes this as the `sa` monster AI in escape mode. Like BFS,
+it is run through a temporary map file.
 
 ### Greedy Multi-Monster Chase
 
@@ -143,6 +163,7 @@ Important functions and classes:
 ```text
 maze-escape-ai/
 ├── ai/
+│   ├── __init__.py       # AI package facade and C++ adapter helpers
 │   ├── astar.py          # A* pathfinding and two-monster movement helper
 │   ├── bfs_escape.cpp    # BFS-based human escape move
 │   ├── genetic_map.py    # Genetic Algorithm map generation
@@ -158,8 +179,9 @@ maze-escape-ai/
 │   ├── main.pdf          # compiled report
 │   └── sections/
 ├── tests/
-│   └── test_genetic_map.py
+│   └── test_flask_game.py
 ├── ui/                   # placeholder UI modules
+├── main.py               # Flask backend, API routes, and minimal web UI
 ├── requirements.txt
 └── README.md
 ```
@@ -180,15 +202,22 @@ Example tail:
 20 17
 ```
 
-`ai/astar.py` can also parse a two-monster format when three coordinate lines
-are present near the end of a map file, but the C++ files currently use the
-single-human / single-monster format.
+The C++ files currently use the single-human / single-monster format. The Flask
+backend preserves this by running C++ algorithms with temporary single-monster
+map files.
 
 ## Setup
 
-The repository has no required third-party Python packages at the moment;
-`requirements.txt` is currently empty. Python 3.9+ is recommended because the
-Python modules use modern type hints.
+Flask 3.x supports Python 3.9 and newer. This project has been verified with a
+Conda environment named `pai` using Python 3.12.
+
+```bash
+conda create -n pai python=3.12 -y
+conda activate pai
+python -m pip install -r requirements.txt
+```
+
+You can also use a virtual environment:
 
 ```bash
 python -m venv .venv
@@ -196,17 +225,103 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-## Running the Python Smoke Test
+## Running the Flask Game
 
-The current test file is a script-style smoke test rather than a pytest test
-case. It generates a small Genetic Algorithm map and prints spawn information.
+Start the development server from the repository root:
 
 ```bash
-python tests/test_genetic_map.py
+conda activate pai
+python main.py
 ```
 
-Expected output includes the generated map size, selected human and monster
-positions, and their BFS distance.
+Then open the local Flask URL printed by the server, usually:
+
+```text
+http://127.0.0.1:5000
+```
+
+The page has two entry points:
+
+- Escape mode: choose a monster AI (`astar`, `greedy`, `minimax`, or `sa`) and
+  move the human with arrow keys or the direction buttons.
+- Chase mode: control the monster with two directions per interaction; the
+  human responds with BFS.
+
+Each new game generates a fresh 30 x 30 map with:
+
+```python
+generate_map_ga(pop_size=30, generations=20, mutation_rate=0.01, elite_num=5)
+```
+
+Map generation prints GA progress in the server terminal and can take a moment.
+
+## API Usage
+
+Create a game:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/games \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"escape","opponent_ai":"astar","monster_count":1}'
+```
+
+Escape mode supports:
+
+- `opponent_ai`: `astar`, `greedy`, `minimax`, or `sa`
+- `monster_count`: `1` or `2` for `astar`; other AI modes force one monster
+
+Chase mode:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/games \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"chase"}'
+```
+
+Fetch game state:
+
+```bash
+curl http://127.0.0.1:5000/api/games/<game_id>
+```
+
+Move in escape mode:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"up"}'
+```
+
+Move in chase mode:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
+  -H 'Content-Type: application/json' \
+  -d '{"directions":["left","left"]}'
+```
+
+Valid directions are `up`, `down`, `left`, and `right`. Invalid directions,
+wall collisions, moves after the game ends, and unknown `game_id` values return
+JSON errors.
+
+## Running Tests
+
+The Flask API tests use Python's built-in `unittest` module and monkeypatch the
+slow map generation / C++ calls where needed.
+
+```bash
+conda activate pai
+python -m py_compile ai/__init__.py main.py tests/test_flask_game.py
+python -m unittest tests.test_flask_game
+```
+
+Expected result:
+
+```text
+Ran 8 tests
+
+OK
+```
 
 ## Running the C++ Algorithms
 
@@ -227,19 +342,22 @@ g++ -std=c++17 SA.cpp -o SA
 
 Both programs update `map/generated_map.txt` after computing the next move.
 
+The Flask backend auto-detects these executables. If an executable is missing,
+it tries to compile it with `g++ -std=c++17`; if compilation fails, the related
+API request returns a clear JSON error while the Flask app remains usable.
+
 ## Report
 
 The LaTeX report is stored in `paper/main.tex`, and the compiled PDF is stored
-in `paper/main.pdf`. The report describes the intended full project scope,
-including Greedy Search, Minimax, item generation, UI, and algorithm comparison.
-Some of those parts are still placeholders in the current codebase.
+in `paper/main.pdf`. The report describes the broader project scope, including
+Greedy Search, Minimax, item generation, UI, and algorithm comparison.
 
 ## Suggested Next Steps
 
-- Add a main game loop that connects map generation, human movement, monster
-  movement, collision checks, and turn progression.
-- Fill in the UI modules or remove them until the UI is ready.
-- Convert `tests/test_genetic_map.py` into proper pytest assertions.
-- Add a script that generates `map/generated_map.txt` from
-  `ai/genetic_map.py`.
+- Split the inline HTML/CSS/JavaScript in `main.py` into templates and static
+  assets when the UI grows.
+- Add persistent score history or a leaderboard for survival / catch step
+  counts.
+- Add browser-level tests for the playable UI.
+- Consider adding a faster map-generation preset for development.
 - Keep the report and README aligned with the implemented code.
