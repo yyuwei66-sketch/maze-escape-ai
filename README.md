@@ -18,14 +18,14 @@ Implemented:
 - A* monster pathfinding in `ai/astar.py`
 - BFS-based human escape step selection in `ai/bfs_escape.cpp`
 - Simulated Annealing monster movement in `ai/SA.cpp`
+- Greedy multi-monster chase controller in `ai/greedy.py`
+- Minimax multi-monster chase controller in `ai/minimax.py`
 - Generated map file in `map/generated_map.txt`
 - Basic Genetic Algorithm smoke test in `tests/test_genetic_map.py`
 - Project report source and PDF in `paper/`
 
 Present but still empty / placeholder:
 
-- `ai/greedy.py`
-- `ai/minimax.py`
 - `ui/hud.py`
 - `ui/menu.py`
 - `ui/renderer.py`
@@ -85,6 +85,59 @@ monster. It writes the updated human position back to the map file.
 monster to the human, improves that path with Simulated Annealing, and writes the
 monster's moved position back to the map file.
 
+### Greedy Multi-Monster Chase
+
+`ai/greedy.py` implements a Python monster controller for one or more monsters
+on the wrap-around maze. It builds a `TorusGrid` representation with wall-aware
+adjacency lists and cached BFS distance fields. Each monster then takes up to
+`steps_per_turn` moves by choosing the neighboring cell with the smallest
+distance to the current human position.
+
+The controller can optionally allow monsters to stay in place and can avoid
+stacking multiple monsters on the same cell unless that cell is the human's
+position. It also provides helpers to load the generated map and choose extra
+monster spawn points when the map file does not contain enough usable spawns.
+
+Important functions and classes:
+
+- `TorusGrid`: wrap-around grid model with walls, adjacency lists, and BFS
+  distance caching
+- `GreedyMonsterAI.decide(player_pos, monster_positions)`: returns each
+  monster's planned path for the current turn
+- `make_greedy_controller(...)`: creates a controller from explicit walls and
+  grid dimensions
+- `make_greedy_controller_from_map(...)`: creates a controller from
+  `map/generated_map.txt`
+- `pick_monster_spawns(...)`: selects reachable monster spawn cells away from
+  the human
+
+### Minimax Multi-Monster Chase
+
+`ai/minimax.py` implements a lookahead monster controller on the same toroidal
+grid model. It treats the chase as an alternating search: each monster moves for
+its configured number of steps, then the human is allowed to choose a response.
+Monsters minimize the human's safety score while the human maximizes it.
+
+The search uses alpha-beta pruning, a small transposition table, move ordering,
+and a distance-based evaluation function. Catching the human receives a very
+large score swing, while non-terminal states are evaluated by the shortest
+distances between the human and the monsters. The controller returns planned
+per-monster paths for the current turn, so it can be used in the same style as
+the greedy controller.
+
+Important functions and classes:
+
+- `TorusGrid`: wrap-around grid model shared in structure with the greedy
+  controller
+- `MinimaxMonsterAI.decide(player_pos, monster_positions)`: searches ahead and
+  returns each monster's planned path for the current turn
+- `make_minimax_controller(...)`: creates a controller from explicit walls and
+  grid dimensions
+- `make_minimax_controller_from_map(...)`: creates a controller from
+  `map/generated_map.txt`
+- `pick_monster_spawns(...)`: selects reachable monster spawn cells away from
+  the human
+
 ## Repository Structure
 
 ```text
@@ -94,8 +147,8 @@ maze-escape-ai/
 │   ├── bfs_escape.cpp    # BFS-based human escape move
 │   ├── genetic_map.py    # Genetic Algorithm map generation
 │   ├── SA.cpp            # Simulated Annealing monster movement
-│   ├── greedy.py         # placeholder
-│   └── minimax.py        # placeholder
+│   ├── greedy.py         # Greedy multi-monster chase controller
+│   └── minimax.py        # Minimax multi-monster chase controller
 ├── assets/
 │   └── fonts/            # bundled Munro font and license
 ├── map/
@@ -185,7 +238,6 @@ Some of those parts are still placeholders in the current codebase.
 
 - Add a main game loop that connects map generation, human movement, monster
   movement, collision checks, and turn progression.
-- Implement the placeholder Greedy and Minimax Python modules.
 - Fill in the UI modules or remove them until the UI is ready.
 - Convert `tests/test_genetic_map.py` into proper pytest assertions.
 - Add a script that generates `map/generated_map.txt` from

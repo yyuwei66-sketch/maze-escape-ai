@@ -140,54 +140,89 @@ def get_next_steps_two(
         return blocker_next, chaser_next
 
 
-# ──────────────────────────────────────────────
-# map loading and test
-# ──────────────────────────────────────────────
+def _find_map_file(path=None):
+    candidates = ([path] if path else []) + [
+        os.path.join("map", "generated_map.txt"),
+        os.path.join("..", "map", "generated_map.txt"),
+        os.path.join("data", "generated_map.txt"),
+        "generated_map.txt",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _load_map_txt(path: str) -> tuple[list[list[int]], list[tuple[int, int]]]:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    if len(lines) < GRID_SIZE + 2:
+        raise ValueError("map file must contain 30 grid rows and coordinates")
+
+    grid: list[list[int]] = []
+    for lineno, line in enumerate(lines[:GRID_SIZE], start=1):
+        row = [int(x) for x in line.split()]
+        if len(row) != GRID_SIZE:
+            raise ValueError(
+                f"grid row {lineno} must contain {GRID_SIZE} cells"
+            )
+        if any(cell not in (0, 1) for cell in row):
+            raise ValueError(f"grid row {lineno} must contain only 0 or 1")
+        grid.append(row)
+
+    spawns: list[tuple[int, int]] = []
+    for lineno, line in enumerate(lines[GRID_SIZE:], start=GRID_SIZE + 1):
+        values = [int(x) for x in line.split()]
+        if len(values) != 2:
+            raise ValueError(
+                f"spawn line {lineno} must contain exactly two integers"
+            )
+        spawns.append((values[0] % GRID_SIZE, values[1] % GRID_SIZE))
+
+    if len(spawns) < 2:
+        raise ValueError("map file must contain human and monster coordinates")
+    return grid, spawns
+
+
+def _write_map_txt(
+    path: str,
+    grid: list[list[int]],
+    spawns: list[tuple[int, int]],
+) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        for row in grid:
+            f.write(" ".join(str(cell) for cell in row) + " \n")
+        for r, c in spawns:
+            f.write(f"{r} {c}\n")
+
+
+def move_monsters_in_map(map_path=None) -> list[tuple[int, int]]:
+    path = _find_map_file(map_path)
+    if path is None:
+        raise FileNotFoundError(
+            "generated_map.txt not found -- run genetic_map.py first."
+        )
+
+    grid, spawns = _load_map_txt(path)
+    player_pos = spawns[0]
+    monsters = spawns[1:]
+
+    if len(monsters) == 1:
+        moved_monsters = [get_next_step_single(grid, monsters[0], player_pos)]
+    else:
+        first, second = get_next_steps_two(
+            grid, monsters[0], monsters[1], player_pos
+        )
+        moved_monsters = [first, second]
+        for monster in monsters[2:]:
+            moved_monsters.append(get_next_step_single(grid, monster, player_pos))
+
+    _write_map_txt(path, grid, [player_pos, *moved_monsters])
+    return moved_monsters
+
 
 if __name__ == "__main__":
-
-    MAP_FILE_PATH = os.path.join("..", "map", "generated_map.txt")
-    if not os.path.exists(MAP_FILE_PATH):
-        MAP_FILE_PATH = os.path.join("map", "generated_map.txt")
-
-    grid = []
-
-    try:
-        with open(MAP_FILE_PATH, "r") as f:
-
-            lines = [line.strip() for line in f if line.strip()]
-
-        for i in range(GRID_SIZE):
-            row_cells = [int(x) for x in lines[i].split()]
-            grid.append(row_cells)
-
-        coordinate_lines = lines[GRID_SIZE:]
-        coordinate_count = len(coordinate_lines)
-
-        if coordinate_count == 2:
-            
-            player_pos = tuple(int(x) for x in coordinate_lines[0].split())
-            m1_pos = tuple(int(x) for x in coordinate_lines[1].split())
-
-            
-            # one monster
-            next_step = get_next_step_single(grid, m1_pos, player_pos)
-
-        elif coordinate_count >= 3:
-            
-            player_pos = tuple(int(x) for x in coordinate_lines[-3].split())
-            m1_pos = tuple(int(x) for x in coordinate_lines[-2].split())
-            m2_pos = tuple(int(x) for x in coordinate_lines[-1].split())
-
-            
-            # double monster
-            n1, n2 = get_next_steps_two(grid, m1_pos, m2_pos, player_pos)
-
-            
-        else:
-            print("Warning: Coordinate data is missing at the end of the map file; human and monster locations cannot be parsed.。")
-
-    except Exception as e:
-        print(f"fail")
-        print(f"{e}")
+    moved = move_monsters_in_map()
+    print(f"ASTAR moved monsters: {moved}")
 

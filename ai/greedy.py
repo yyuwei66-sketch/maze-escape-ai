@@ -151,12 +151,77 @@ import os
 
 def _find_map_file(path=None):
     candidates = ([path] if path else []) + [
-        "map/generated_map.txt", "data/generated_map.txt", "generated_map.txt",
+        "map/generated_map.txt", "../map/generated_map.txt",
+        "data/generated_map.txt", "generated_map.txt",
     ]
     for p in candidates:
         if p and os.path.exists(p):
             return p
     return None
+
+
+def _load_map_txt(path: str) -> Tuple[List[List[int]], List[Pos], List[Pos]]:
+    raw_rows: List[List[int]] = []
+    raw_spawns: List[Tuple[int, int]] = []
+
+    with open(path, "r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    reading_grid = True
+    width = None
+    for lineno, line in enumerate(lines, start=1):
+        parts = line.split()
+        try:
+            values = [int(part) for part in parts]
+        except ValueError as exc:
+            raise ValueError(f"invalid integer on line {lineno}: {line!r}") from exc
+
+        is_grid_row = (
+            reading_grid
+            and len(values) > 2
+            and all(value in (0, 1) for value in values)
+        )
+        if is_grid_row:
+            if width is None:
+                width = len(values)
+            elif len(values) != width:
+                raise ValueError(
+                    f"inconsistent map width on line {lineno}: "
+                    f"expected {width}, got {len(values)}"
+                )
+            raw_rows.append(values)
+            continue
+
+        reading_grid = False
+        if len(values) != 2:
+            raise ValueError(
+                f"spawn line {lineno} must contain exactly two integers"
+            )
+        raw_spawns.append((values[0], values[1]))
+
+    if not raw_rows:
+        raise ValueError("map file does not contain any grid rows")
+    if not raw_spawns:
+        raise ValueError("map file does not contain any spawn coordinates")
+
+    height = len(raw_rows)
+    width = len(raw_rows[0])
+    walls = [
+        (col, row)
+        for row, cells in enumerate(raw_rows)
+        for col, value in enumerate(cells)
+        if value == 1
+    ]
+    spawns = [(col % width, row % height) for row, col in raw_spawns]
+    return raw_rows, walls, spawns
+
+
+def _write_map_txt(path: str, grid: List[List[int]], spawns: Sequence[Pos]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        for row in grid:
+            f.write(" ".join(str(cell) for cell in row) + " \n")
+        for x, y in spawns:
+            f.write(f"{y} {x}\n")
 
 
 def pick_monster_spawns(grid: TorusGrid, player_pos: Pos, count: int,
@@ -193,12 +258,11 @@ def pick_monster_spawns(grid: TorusGrid, player_pos: Pos, count: int,
 def make_greedy_controller_from_map(map_path=None, steps_per_turn: int = 2,
                                     allow_stay: bool = False,
                                     avoid_stacking: bool = True):
-    import genetic_map
     path = _find_map_file(map_path)
     if path is None:
         raise FileNotFoundError(
             "generated_map.txt not found -- run genetic_map.py first.")
-    grid, walls, spawns = genetic_map.load_map_txt(path)
+    grid, walls, spawns = _load_map_txt(path)
     height, width = len(grid), len(grid[0])
     ctrl = make_greedy_controller(walls, width, height,
                                   steps_per_turn=steps_per_turn,
@@ -207,36 +271,31 @@ def make_greedy_controller_from_map(map_path=None, steps_per_turn: int = 2,
     return ctrl, spawns
 
 
+def move_monsters_in_map(map_path=None, steps_per_turn: int = 2,
+                         allow_stay: bool = False,
+                         avoid_stacking: bool = True) -> List[Pos]:
+    path = _find_map_file(map_path)
+    if path is None:
+        raise FileNotFoundError(
+            "generated_map.txt not found -- run genetic_map.py first.")
+
+    grid, walls, spawns = _load_map_txt(path)
+    if len(spawns) < 2:
+        raise ValueError("map file must contain human and monster coordinates")
+
+    height, width = len(grid), len(grid[0])
+    ctrl = make_greedy_controller(walls, width, height,
+                                  steps_per_turn=steps_per_turn,
+                                  allow_stay=allow_stay,
+                                  avoid_stacking=avoid_stacking)
+    player = spawns[0]
+    monsters = spawns[1:]
+    paths = ctrl.decide(player, monsters)
+    moved_monsters = [monster_path[-1] for monster_path in paths]
+    _write_map_txt(path, grid, [player, *moved_monsters])
+    return moved_monsters
+
 
 if __name__ == "__main__":
-    NUM_MONSTERS = 2
-    ctrl, spawns = make_greedy_controller_from_map()
-    g = ctrl.g
-    player = spawns[0]
-    fld = g.distance_field(player)
-    monsters = [m for m in spawns[1:] if fld[g.index(m)] >= 0][:NUM_MONSTERS - 1]
-    monsters += pick_monster_spawns(g, player, NUM_MONSTERS - len(monsters),
-                                    exclude=monsters)
-
-    print(f"GREEDY on GA map  {g.w}x{g.h}, walls={len(g.walls)}")
-    print(f"  human spawn   : {player}")
-    print(f"  monster spawns: {monsters}")
-
-    for turn in range(1, 201):
-        # simulate a human that flees toward the farthest spot from monsters
-        mfields = [g.distance_field(m) for m in monsters]
-        pi = g.index(player)
-        best, best_score = pi, -1
-        for j in list(g.adj[pi]) + [pi]:
-            s = min((f[j] if f[j] >= 0 else 0) for f in mfields)
-            if s > best_score:
-                best_score, best = s, j
-        player = g.coord(best)
-        if player in monsters:
-            print(f"  CAUGHT at turn {turn}"); break
-        paths = ctrl.decide(player, monsters)
-        monsters = [p[-1] for p in paths]
-        if any(player in p for p in paths):
-            print(f"  CAUGHT at turn {turn}"); break
-    else:
-        print("  human survived 200 turns (likely a disconnected spawn)")
+    moved = move_monsters_in_map()
+    print(f"GREEDY moved monsters: {moved}")
