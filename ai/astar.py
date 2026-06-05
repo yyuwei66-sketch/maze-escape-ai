@@ -141,35 +141,53 @@ def get_next_steps_two(
 
 
 # ──────────────────────────────────────────────
-# map_loading and test entry
+# map loading and test
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    MAP_FILE_PATH = os.path.join("...", "map", "generated_map.txt")
 
+    MAP_FILE_PATH = os.path.join("..", "map", "generated_map.txt")
     if not os.path.exists(MAP_FILE_PATH):
         MAP_FILE_PATH = os.path.join("map", "generated_map.txt")
 
     grid = []
-    player_pos = (0, 0)
-    m1_pos = (0, 0)
-    m2_pos = (0, 0)
 
     try:
         with open(MAP_FILE_PATH, "r") as f:
+
             lines = [line.strip() for line in f if line.strip()]
 
         for i in range(GRID_SIZE):
             row_cells = [int(x) for x in lines[i].split()]
             grid.append(row_cells)
 
-        p_row, p_col = [int(x) for x in lines[-2].split()]
-        player_pos = (p_row, p_col)
+        coordinate_lines = lines[GRID_SIZE:]
+        coordinate_count = len(coordinate_lines)
 
-      
-        m1_row, m1_col = [int(x) for x in lines[-1].split()]
-        m1_pos = (m1_row, m1_col)
+        if coordinate_count == 2:
+            
+            player_pos = tuple(int(x) for x in coordinate_lines[0].split())
+            m1_pos = tuple(int(x) for x in coordinate_lines[1].split())
 
-        m2_row, m2_col = [int(x) for x in lines[-1].split()]
-        m2_pos = (m2_row, m2_col)
+            
+            # one monster
+            next_step = get_next_step_single(grid, m1_pos, player_pos)
+
+        elif coordinate_count >= 3:
+            
+            player_pos = tuple(int(x) for x in coordinate_lines[-3].split())
+            m1_pos = tuple(int(x) for x in coordinate_lines[-2].split())
+            m2_pos = tuple(int(x) for x in coordinate_lines[-1].split())
+
+            
+            # double monster
+            n1, n2 = get_next_steps_two(grid, m1_pos, m2_pos, player_pos)
+
+            
+        else:
+            print("Warning: Coordinate data is missing at the end of the map file; human and monster locations cannot be parsed.。")
+
+    except Exception as e:
+        print(f"fail")
+        print(f"{e}")
 
