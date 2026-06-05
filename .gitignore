@@ -3,3 +3,28 @@
 ai/SA
 ai/SA.dSYM/
 __pycache__/
+# LaTeX temporary files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.xdv
+
+# Python temporary files
+__pycache__/
+*.pyc
+
+# VS Code settings, optional
+.vscode/
