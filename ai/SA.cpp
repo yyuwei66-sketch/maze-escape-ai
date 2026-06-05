@@ -12,7 +12,7 @@ const int MAX_PATH_LEN = 100;
 const int INNER_LOOP = 200;
 const int DFS_INITIAL_SEARCH_LIMIT = 5000000;
 const int DFS_EXTEND_SEARCH_LIMIT = 80;
-const string MAP_FILE_PATH = "../map/test2.txt";
+const string MAP_FILE_PATH = "../map/generated_map.txt";
 
 int xh,yh;
 int xm,ym;
@@ -255,25 +255,16 @@ int main()
         return 1;
     }
 
-    int n=0;
-    fin>>n;
-    for(int i=1;i<=n;i++)
-    {
-        int x,y;
-        fin>>x>>y;
-        mp[x][y]=true;
-    }
-/*
+    int cell;
     for(int i=0;i<30;i++)
     {
         for(int j=0;j<30;j++)
         {
-            if(mp[i][j])cout<<"*";
-            else cout<<" ";
+            fin>>cell;
+            mp[i][j]=(cell!=0);
         }
-        cout<<endl;
     }
-*/
+
     fin>>xh>>yh;//human
     fin>>xm>>ym;//monster
 

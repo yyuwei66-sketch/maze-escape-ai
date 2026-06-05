@@ -234,6 +234,13 @@ def generate_map_ga(pop_size=30, generations=20, mutation_rate=0.01, elite_num=5
     return best_map
 
 
+def torus_manhattan_distance(a, b):
+    dx = abs(a[0] - b[0])
+    dy = abs(a[1] - b[1])
+
+    return min(dx, HEIGHT - dx) + min(dy, WIDTH - dy)
+
+
 def get_valid_spawn_points(grid, min_dist=10, max_dist=25):
     floor_cells = get_floor_cells(grid)
 
@@ -252,13 +259,50 @@ def get_valid_spawn_points(grid, min_dist=10, max_dist=25):
     return random.choice(floor_cells), random.choice(floor_cells)
 
 
-def save_map_to_txt(grid, file_path="data/generated_map.txt"):
+def get_approx_torus_spawn_points(grid, target_dist=20, attempts=5000):
+    floor_cells = get_floor_cells(grid)
+
+    if len(floor_cells) < 2:
+        raise ValueError("Need at least two floor cells to generate spawn points.")
+
+    best_pair = None
+    best_delta = None
+
+    for _ in range(attempts):
+        human = random.choice(floor_cells)
+        monster = random.choice(floor_cells)
+
+        if human == monster:
+            continue
+
+        dist = torus_manhattan_distance(human, monster)
+        delta = abs(dist - target_dist)
+
+        if delta == 0:
+            return human, monster
+
+        if best_delta is None or delta < best_delta:
+            best_pair = (human, monster)
+            best_delta = delta
+
+    if best_pair is not None:
+        return best_pair
+
+    human, monster = random.sample(floor_cells, 2)
+    return human, monster
+
+
+def save_map_to_txt(grid, file_path="data/generated_map.txt", spawn_points=None):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
     with open(file_path, "w", encoding="utf-8") as f:
         for row in grid:
             line = " ".join(str(cell) for cell in row)
             f.write(line + "\n")
+
+        if spawn_points is not None:
+            for x, y in spawn_points:
+                f.write(f"{x} {y}\n")
 
     print(f"TXT map saved to: {file_path}")
     
@@ -287,10 +331,17 @@ if __name__ == "__main__":
     print_map(generated_map)
     print("Fitness:", fitness(generated_map))
 
-    human_pos, monster_pos = get_valid_spawn_points(generated_map)
+    human_pos, monster_pos = get_approx_torus_spawn_points(generated_map)
 
     print("Human spawn:", human_pos)
     print("Monster spawn:", monster_pos)
-    print("Spawn distance:", bfs_distance(human_pos, monster_pos, generated_map))
+    print("Spawn distance:", torus_manhattan_distance(human_pos, monster_pos))
 
-    save_map_to_txt(generated_map, "map/generated_map.txt")
+    save_map_to_txt(
+        generated_map,
+        "map/generated_map.txt",
+        (human_pos, monster_pos)
+    )
+
+    print(f"{human_pos[0]} {human_pos[1]}")
+    print(f"{monster_pos[0]} {monster_pos[1]}")
