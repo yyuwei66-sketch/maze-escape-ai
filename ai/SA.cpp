@@ -269,12 +269,33 @@ int main()
     fin>>xm>>ym;//monster
 
     vector<Point> dfsPath=makeInitialPath();
-    cout<<"DFS result:"<<endl;
-    printMap(dfsPath);
+    // cout<<"DFS result:"<<endl;
+    // printMap(dfsPath);
 
-    cout<<endl<<"SA result:"<<endl;
     vector<Point> path=simulatedAnnealing(dfsPath);
-    printMap(path);
+    // cout<<endl<<"SA result:"<<endl;
+    // printMap(path);
+
+    int moveStep=min(2,(int)path.size()-1);
+    Point movedMonster=path[moveStep];
+
+    ofstream fout(MAP_FILE_PATH);
+    if(!fout)
+    {
+        cerr<<"Cannot open output file. Please set MAP_FILE_PATH in SA.cpp."<<endl;
+        return 1;
+    }
+
+    for(int i=0;i<30;i++)
+    {
+        for(int j=0;j<30;j++)
+        {
+            fout<<mp[i][j]<<" ";
+        }
+        fout<<endl;
+    }
+    fout<<xh<<" "<<yh<<endl;
+    fout<<movedMonster.x<<" "<<movedMonster.y;
 
     return 0;
 }
