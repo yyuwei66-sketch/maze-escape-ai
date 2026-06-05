@@ -1,5 +1,5 @@
 import heapq
-import random
+import os
 from typing import Optional
 
 GRID_SIZE = 30
@@ -93,6 +93,11 @@ def _intercept_point(
     dr = pr - mr
     dc = pc - mc
 
+    if abs(dr) > GRID_SIZE // 2:
+        dr = dr - GRID_SIZE if dr > 0 else dr + GRID_SIZE
+    if abs(dc) > GRID_SIZE // 2:
+        dc = dc - GRID_SIZE if dc > 0 else dc + GRID_SIZE
+
     sign_r = (1 if dr > 0 else -1) if dr != 0 else 0
     sign_c = (1 if dc > 0 else -1) if dc != 0 else 0
 
@@ -135,24 +140,36 @@ def get_next_steps_two(
         return blocker_next, chaser_next
 
 
+# ──────────────────────────────────────────────
+# map_loading and test entry
+# ──────────────────────────────────────────────
+
 if __name__ == "__main__":
-    random.seed(42)
-    grid = [
-        [1 if random.random() < 0.10 else 0 for _ in range(GRID_SIZE)]
-        for _ in range(GRID_SIZE)
-    ]
-    grid[0][0] = grid[5][5] = grid[25][25] = grid[15][15] = 0
+    MAP_FILE_PATH = os.path.join("...", "map", "generated_map.txt")
 
-    monster = (0, 0)
-    player = (25, 25)
-    path = astar(grid, monster, player)
-    print(f"[Single Monster] A* Path Length: {len(path)}")
-    print(f"  Start={monster}, Goal={player}")
-    print(f"  First 5 steps: {path[:5]}")
-    print(f"  Next step: {get_next_step_single(grid, monster, player)}")
+    if not os.path.exists(MAP_FILE_PATH):
+        MAP_FILE_PATH = os.path.join("map", "generated_map.txt")
 
-    m1 = (0, 0)
-    m2 = (0, 29)
-    player2 = (15, 15)
-    n1, n2 = get_next_steps_two(grid, m1, m2, player2)
-    print(f"\n[Dual Monsters] m1={m1} → {n1}, m2={m2} → {n2}, Player={player2}")
+    grid = []
+    player_pos = (0, 0)
+    m1_pos = (0, 0)
+    m2_pos = (0, 0)
+
+    try:
+        with open(MAP_FILE_PATH, "r") as f:
+            lines = [line.strip() for line in f if line.strip()]
+
+        for i in range(GRID_SIZE):
+            row_cells = [int(x) for x in lines[i].split()]
+            grid.append(row_cells)
+
+        p_row, p_col = [int(x) for x in lines[-2].split()]
+        player_pos = (p_row, p_col)
+
+      
+        m1_row, m1_col = [int(x) for x in lines[-1].split()]
+        m1_pos = (m1_row, m1_col)
+
+        m2_row, m2_col = [int(x) for x in lines[-1].split()]
+        m2_pos = (m2_row, m2_col)
+
