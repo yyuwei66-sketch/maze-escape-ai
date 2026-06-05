@@ -1,5 +1,8 @@
 .DS_Store
 .vscode/
+.dSYM
+ai/bfs_escape.dSYM
+ai/bfs_escape
 ai/SA
 ai/SA.dSYM/
 __pycache__/
