@@ -37,15 +37,7 @@ Assessment Title: Final Assessment Group Project
 \tableofcontents
 \newpage
 
-\section*{Abstract}
-
-This project develops an AI-based survival chase game called Maze Escape. The game is built on a 30 by 30 grid map where the human moves one step per turn and the monster moves two steps per turn. The project applies several artificial intelligence algorithms, including Genetic Algorithm, BFS, Greedy Search, A* Pathfinding, Minimax, and Simulated Annealing. The aim of this project is to demonstrate how AI algorithms can be used in a dynamic game environment.
-
-\section{Introduction}
-
-Maze Escape is a human versus monster survival game. The player needs to survive in a maze environment while monsters try to catch the human. This project was selected because pathfinding and decision-making are important topics in artificial intelligence, especially in game AI.
-
-The game uses a 30 by 30 grid-based map. The map supports wrap-around boundary movement, which means that when a character moves out of one side of the map, it appears on the opposite side. This rule makes the pathfinding problem more interesting because AI algorithms need to consider the map as a continuous grid.
+\input{sections/syr-introduction}
 
 \section{Project Objectives}
 
@@ -85,13 +77,7 @@ Several AI algorithms are used for monster movement.
 
 Greedy Search allows the monster to choose the next move that reduces the distance to the human. It is simple and fast, but it may not perform well when obstacles exist.
 
-A* Pathfinding uses the formula:
-
-\[
-f(n) = g(n) + h(n)
-\]
-
-where \(g(n)\) is the actual movement cost from the start node, and \(h(n)\) is the estimated distance to the target. A* is used to find an efficient path from the monster to the human.
+\input{sections/syr-astar}
 
 Minimax treats the chase as a two-player decision problem. The monster tries to minimize the distance to the human, while the human tries to maximize the distance from the monster.
 

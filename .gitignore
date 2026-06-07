@@ -8,6 +8,7 @@ ai/SA
 ai/genetic_map
 ai/SA.dSYM/
 ai/finetune.md
+paper/report.md
 __pycache__/
 # LaTeX temporary files
 *.aux

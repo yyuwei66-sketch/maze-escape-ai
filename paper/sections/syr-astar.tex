@@ -1,0 +1,15 @@
+\subsubsection{A* Algorithm}
+
+A\* is a heuristic graph search algorithm. It finds the shortest path between two nodes by adding the cost of the lined path to the residual cost estimate of reaching the target node. The cost of each node is calculated by the following function:
+
+\[
+f(n) = g(n) + h(n)
+\]
+
+In the process of the monster moving to the player in each round, the map grid is regarded as an untitled map, thus calculating the path cost. Due to randomly generated roadblocks, each walkable grid cell has up to four neighbors, which can be reached by moving up, down, left or right. When calculating heuristic functions, we use the Manhattan distance between the current cell and the player's location. In addition, because the map has a ring structure, we will apply modular operations to the row index and column index every time we expand the neighbor. This allows movement to cross the grid boundary. After the algorithm is executed, the core function astar(grid, start, goal) will return the full path from the current position of the monster to the player. With each move of the player, the Astar algorithm will calculate the corresponding optimal path. If there is no path (for example, the player is completely surrounded by a wall), the monster will stay in place.
+
+\subsubsection{Double Monsters}
+
+In the double monster A\* mode, in order to improve the probability of the player being caught up, the algorithm will give each monster a different role, and also ensure that the two monsters cannot enter the same path. Among them, the monster closest to the player (measured by Manhattan distance) is the chaser, which directly uses the A\* algorithm to chase the player. The monster far away from the player is the interceptor. It predicts the future direction of the player and moves to the interception point, so as to achieve enveloping.
+
+For the character setting of the second monster, the method of determining the interception point is to project the player's position forward, point from the chaser to the player's direction, and fix the offset of the four grid units. The offset will be adjusted according to the ring topology. If the projection cell is a wall, the algorithm will consider whether it can penetrate the wall. If not, the interception target will return to the player's current position. In this case, the interceptor will also chase the player directly. This kind of character allocation means that two monsters will appear from different angles, which will make it more difficult for players to escape. The key functions of this pattern are get\_next\_step\_single and get\_next\_steps\_two. get\_next\_steps\_single is used to return the next cell chased by a single monster, while get\_next\_steps\_two is used to set the role of each monster before calculating the next step of each monster using the A\* algorithm.
