@@ -1,0 +1,19 @@
+\section{Validation and Verification}
+
+Several tests are used to validate the project.
+
+\subsection{Map Generation Test}
+
+The generated map should have 30 rows and 30 columns. Each cell should only contain 0 or 1. The wall ratio should be reasonable, and most walkable cells should be connected.
+
+\subsection{Spawn Test}
+
+The human and monster should spawn on walkable cells. They should not spawn on the same position. Their starting distance should also be within a reasonable range to avoid unfair gameplay.
+
+\subsection{Boundary Test}
+
+The wrap-around boundary is tested by moving characters across the edges of the map. Moving left from column 0 should move the character to column 29. Moving up from row 0 should move the character to row 29.
+
+\subsection{Algorithm Comparison}
+
+The monster AI algorithms can be compared using capture steps, runtime, and behavior. Greedy Search is simple and fast. A* is more stable for pathfinding. Minimax can predict future movement but requires more computation. Simulated Annealing provides more random behavior.

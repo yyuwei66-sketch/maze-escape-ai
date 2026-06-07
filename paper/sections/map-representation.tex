@@ -1,0 +1,5 @@
+\subsection{Map Representation}
+
+The game map is represented as a 30 by 30 two-dimensional grid. In the map, 0 represents a walkable floor cell, while 1 represents a wall. The human and monsters can only move on walkable cells.
+
+The map also uses a wrap-around boundary system. For example, if a character moves left from column 0, it will appear at column 29. This is implemented by using the modulo operation.

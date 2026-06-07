@@ -1,0 +1,7 @@
+\subsection{Genetic Algorithm for Map Generation}
+
+A Genetic Algorithm is used to generate playable maps. Each map is treated as one chromosome. A chromosome is represented as a 30 by 30 binary grid, where 0 means floor and 1 means wall.
+
+The initial population contains several randomly generated maps. Each map is evaluated using a fitness function. The fitness function considers reachability, wall ratio, junction complexity, and path distance. Reachability checks whether most walkable cells are connected. Wall ratio prevents the map from being too empty or too blocked. Junction complexity encourages more branching paths. Path distance helps keep the chase distance reasonable.
+
+After fitness evaluation, tournament selection is used to choose better maps as parents. Crossover combines two parent maps by cutting and joining their rows or columns. Mutation randomly changes a small number of cells from floor to wall or from wall to floor. After several generations, the best map is saved as a text file using 0 and 1 values separated by spaces.
