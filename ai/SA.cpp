@@ -9,7 +9,7 @@ using namespace std;
 
 const int MAP_SIZE = 30;
 const int MAX_PATH_LEN = 100;
-const int INNER_LOOP = 200;
+const int INNER_LOOP = 40;
 const int DFS_INITIAL_SEARCH_LIMIT = 5000000;
 const int DFS_EXTEND_SEARCH_LIMIT = 80;
 const string MAP_FILE_PATH = "../map/generated_map.txt";
@@ -186,10 +186,10 @@ vector<Point> simulatedAnnealing(const vector<Point>& initialPath)
     vector<Point> best=current;
     double currentScore=scorePath(current);
     double bestScore=currentScore;
-    double temperature=1000.0;
+    double temperature=100.0;
     uniform_real_distribution<double> realPick(0.0,1.0);
 
-    while(temperature>1e-3)
+    while(temperature>0.1)
     {
         for(int i=0;i<INNER_LOOP;i++)
         {
@@ -209,7 +209,7 @@ vector<Point> simulatedAnnealing(const vector<Point>& initialPath)
                 }
             }
         }
-        temperature*=0.995;
+        temperature*=0.97;
     }
 
     return best;

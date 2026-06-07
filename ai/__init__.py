@@ -73,7 +73,7 @@ def ensure_cpp_executable(algorithm: CppAlgorithm) -> Path:
         raise CppAlgorithmError("g++ is required to compile the C++ AI modules")
 
     result = subprocess.run(
-        [compiler, "-std=c++17", str(source), "-o", str(executable)],
+        [compiler, "-O2", "-std=c++17", str(source), "-o", str(executable)],
         capture_output=True,
         text=True,
         check=False,

@@ -7,6 +7,7 @@ ai/bfs_escape
 ai/SA
 ai/genetic_map
 ai/SA.dSYM/
+ai/finetune.md
 __pycache__/
 # LaTeX temporary files
 *.aux
