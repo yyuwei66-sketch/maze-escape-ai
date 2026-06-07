@@ -62,7 +62,10 @@ def ensure_cpp_executable(algorithm: CppAlgorithm) -> Path:
         raise ValueError(f"unknown C++ algorithm: {algorithm}")
 
     source, executable = _CPP_TARGETS[algorithm]
-    if executable.exists():
+    if (
+        executable.exists()
+        and executable.stat().st_mtime >= source.stat().st_mtime
+    ):
         return executable
 
     compiler = shutil.which("g++")

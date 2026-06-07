@@ -72,6 +72,9 @@ The Flask backend compiles the program on demand and runs it in a temporary
 directory. It reads the generated 30 x 30 grid and spawn coordinates without
 modifying the repository's `map/generated_map.txt`.
 
+The human and monster spawn 30 to 40 BFS steps apart when a matching connected
+pair is found.
+
 ### A* Monster Pathfinding
 
 `ai/astar.py` implements A* search for the monster. It includes:

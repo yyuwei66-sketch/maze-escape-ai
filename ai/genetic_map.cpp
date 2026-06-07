@@ -392,8 +392,8 @@ vector<vector<int>> generateMapGA(
 
 pair<Position, Position> getValidSpawnPoints(
     const vector<vector<int>>& grid,
-    int minDist = 10,
-    int maxDist = 25,
+    int minDist = 30,
+    int maxDist = 40,
     int maxAttempts = 5000
 ) {
     vector<Position> floorCells = getFloorCells(grid);
