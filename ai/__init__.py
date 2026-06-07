@@ -14,15 +14,6 @@ import tempfile
 from typing import Iterable, Literal, Sequence, Tuple
 
 from .astar import astar, get_next_step_single, get_next_steps_two
-from .genetic_map import (
-    HEIGHT,
-    WIDTH,
-    bfs_distance,
-    fitness,
-    generate_map_ga,
-    get_approx_torus_spawn_points,
-    get_valid_spawn_points,
-)
 from .greedy import (
     GreedyMonsterAI,
     make_greedy_controller,
@@ -35,17 +26,23 @@ from .minimax import (
 )
 
 Pos = Tuple[int, int]
-CppAlgorithm = Literal["bfs", "sa"]
+CppAlgorithm = Literal["bfs", "sa", "genetic_map"]
+
+WIDTH = 30
+HEIGHT = 30
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 BFS_ESCAPE_SOURCE = PACKAGE_DIR / "bfs_escape.cpp"
 SA_SOURCE = PACKAGE_DIR / "SA.cpp"
+GENETIC_MAP_SOURCE = PACKAGE_DIR / "genetic_map.cpp"
 BFS_ESCAPE_EXECUTABLE = PACKAGE_DIR / "bfs_escape"
 SA_EXECUTABLE = PACKAGE_DIR / "SA"
+GENETIC_MAP_EXECUTABLE = PACKAGE_DIR / "genetic_map"
 
 _CPP_TARGETS = {
     "bfs": (BFS_ESCAPE_SOURCE, BFS_ESCAPE_EXECUTABLE),
     "sa": (SA_SOURCE, SA_EXECUTABLE),
+    "genetic_map": (GENETIC_MAP_SOURCE, GENETIC_MAP_EXECUTABLE),
 }
 
 
@@ -87,7 +84,7 @@ def ensure_cpp_executable(algorithm: CppAlgorithm) -> Path:
 
 
 def run_cpp_map_algorithm(
-    algorithm: CppAlgorithm,
+    algorithm: Literal["bfs", "sa"],
     grid: Sequence[Sequence[int]],
     human: Pos,
     monster: Pos,
@@ -127,6 +124,84 @@ def run_cpp_map_algorithm(
         if len(spawns) < 2:
             raise CppAlgorithmError(f"{algorithm} did not write two coordinates")
         return spawns[0], spawns[1]
+
+
+def run_cpp_genetic_map() -> tuple[list[list[int]], Pos, Pos]:
+    """Generate a map and spawn points with the bundled C++ GA program."""
+
+    executable = ensure_cpp_executable("genetic_map")
+
+    with tempfile.TemporaryDirectory(prefix="maze_escape_ga_") as tmp:
+        root = Path(tmp)
+        map_dir = root / "map"
+        map_dir.mkdir()
+        map_path = map_dir / "generated_map.txt"
+
+        result = subprocess.run(
+            [str(executable)],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise CppAlgorithmError(
+                f"genetic map generation failed: {detail or 'unknown error'}"
+            )
+        if not map_path.exists():
+            raise CppAlgorithmError(
+                "genetic map generator did not create map/generated_map.txt"
+            )
+
+        return _read_genetic_map(map_path)
+
+
+def _read_genetic_map(path: Path) -> tuple[list[list[int]], Pos, Pos]:
+    lines = [
+        line.split()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not lines or len(lines[0]) != 2:
+        raise CppAlgorithmError("generated map is missing its dimensions")
+
+    try:
+        height, width = (int(value) for value in lines[0])
+    except ValueError as exc:
+        raise CppAlgorithmError("generated map has invalid dimensions") from exc
+
+    if (height, width) != (HEIGHT, WIDTH):
+        raise CppAlgorithmError(
+            f"generated map must be {HEIGHT}x{WIDTH}, got {height}x{width}"
+        )
+    if len(lines) < height + 3:
+        raise CppAlgorithmError("generated map is missing grid rows or spawns")
+
+    try:
+        grid = [[int(value) for value in row] for row in lines[1:height + 1]]
+        human = tuple(int(value) for value in lines[height + 1])
+        monster = tuple(int(value) for value in lines[height + 2])
+    except ValueError as exc:
+        raise CppAlgorithmError("generated map contains a non-integer value") from exc
+
+    if any(len(row) != width for row in grid):
+        raise CppAlgorithmError("generated map has an invalid row width")
+    if any(cell not in (0, 1) for row in grid for cell in row):
+        raise CppAlgorithmError("generated map cells must be 0 or 1")
+    if len(human) != 2 or len(monster) != 2:
+        raise CppAlgorithmError("generated map must contain two spawn coordinates")
+
+    human_pos = (human[0] % height, human[1] % width)
+    monster_pos = (monster[0] % height, monster[1] % width)
+    if grid[human_pos[0]][human_pos[1]] != 0:
+        raise CppAlgorithmError("generated human spawn is inside a wall")
+    if grid[monster_pos[0]][monster_pos[1]] != 0:
+        raise CppAlgorithmError("generated monster spawn is inside a wall")
+    if human_pos == monster_pos:
+        raise CppAlgorithmError("generated spawn coordinates overlap")
+
+    return grid, human_pos, monster_pos
 
 
 def _write_cpp_map(
@@ -187,6 +262,8 @@ __all__ = [
     "BFS_ESCAPE_EXECUTABLE",
     "BFS_ESCAPE_SOURCE",
     "CppAlgorithmError",
+    "GENETIC_MAP_EXECUTABLE",
+    "GENETIC_MAP_SOURCE",
     "GreedyMonsterAI",
     "HEIGHT",
     "MinimaxMonsterAI",
@@ -195,14 +272,9 @@ __all__ = [
     "SA_SOURCE",
     "WIDTH",
     "astar",
-    "bfs_distance",
     "ensure_cpp_executable",
-    "fitness",
-    "generate_map_ga",
-    "get_approx_torus_spawn_points",
     "get_next_step_single",
     "get_next_steps_two",
-    "get_valid_spawn_points",
     "make_greedy_controller",
     "make_minimax_controller",
     "many_row_col_to_xy",
@@ -210,6 +282,7 @@ __all__ = [
     "pick_greedy_monster_spawns",
     "pick_minimax_monster_spawns",
     "row_col_to_xy",
+    "run_cpp_genetic_map",
     "run_cpp_map_algorithm",
     "walls_from_grid",
     "xy_to_row_col",

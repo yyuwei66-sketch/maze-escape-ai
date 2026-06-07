@@ -5,6 +5,7 @@ map/generated_map.txt
 ai/bfs_escape.dSYM
 ai/bfs_escape
 ai/SA
+ai/genetic_map
 ai/SA.dSYM/
 __pycache__/
 # LaTeX temporary files

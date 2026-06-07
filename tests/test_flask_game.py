@@ -22,8 +22,10 @@ class FlaskGameTest(unittest.TestCase):
         self.client = main.app.test_client()
 
     def make_game(self, payload, grid=None, spawns=((0, 0), (0, 5))):
-        with patch("main.generate_map_ga", return_value=grid or open_grid()), \
-                patch("main.get_approx_torus_spawn_points", return_value=spawns):
+        with patch(
+            "main.run_cpp_genetic_map",
+            return_value=(grid or open_grid(), spawns[0], spawns[1]),
+        ):
             return self.client.post("/api/games", json=payload)
 
     def test_create_escape_game(self):

@@ -9,12 +9,11 @@ from flask import Flask, jsonify, request
 from ai import (
     CppAlgorithmError,
     astar,
-    generate_map_ga,
-    get_approx_torus_spawn_points,
     make_greedy_controller,
     make_minimax_controller,
     many_row_col_to_xy,
     many_xy_to_row_col,
+    run_cpp_genetic_map,
     run_cpp_map_algorithm,
     walls_from_grid,
 )
@@ -121,16 +120,7 @@ def create_game(payload: dict[str, Any]) -> GameState:
         opponent_ai = CHASE_AI
         monster_count = 1
 
-    grid = generate_map_ga(
-        pop_size=30,
-        generations=20,
-        mutation_rate=0.01,
-        elite_num=5,
-    )
-    if grid is None:
-        raise ValueError("map generation failed")
-
-    human, first_monster = get_approx_torus_spawn_points(grid)
+    grid, human, first_monster = run_cpp_genetic_map()
     monsters = [first_monster]
     while len(monsters) < monster_count:
         extra = find_extra_monster_spawn(grid, human, monsters)

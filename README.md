@@ -20,7 +20,7 @@ Implemented:
 - Chase mode, where the player controls the monster and the human is controlled
   by BFS escape
 - Public AI package facade and C++ algorithm adapters in `ai/__init__.py`
-- Genetic Algorithm map generation in `ai/genetic_map.py`
+- Genetic Algorithm map generation in `ai/genetic_map.cpp`
 - A* monster pathfinding in `ai/astar.py`
 - BFS-based human escape step selection in `ai/bfs_escape.cpp`
 - Simulated Annealing monster movement in `ai/SA.cpp`
@@ -60,7 +60,7 @@ Present but still empty / placeholder:
 
 ### Genetic Algorithm Map Generation
 
-`ai/genetic_map.py` generates random candidate maps and improves them over
+`ai/genetic_map.cpp` generates random candidate maps and improves them over
 multiple generations. The fitness function rewards:
 
 - high connectivity between floor cells
@@ -68,13 +68,9 @@ multiple generations. The fitness function rewards:
 - useful junctions and branching paths
 - reasonable average path distances
 
-Important functions:
-
-- `generate_map_ga(...)`: generates and returns the best 30 x 30 map
-- `fitness(grid)`: scores a map
-- `get_valid_spawn_points(grid, min_dist=10, max_dist=25)`: selects human and
-  monster spawn points on valid floor cells
-- `bfs_distance(start, end, grid)`: shortest path distance on the wrap-around map
+The Flask backend compiles the program on demand and runs it in a temporary
+directory. It reads the generated 30 x 30 grid and spawn coordinates without
+modifying the repository's `map/generated_map.txt`.
 
 ### A* Monster Pathfinding
 
@@ -167,7 +163,7 @@ maze-escape-ai/
 │   ├── __init__.py       # AI package facade and C++ adapter helpers
 │   ├── astar.py          # A* pathfinding and two-monster movement helper
 │   ├── bfs_escape.cpp    # BFS-based human escape move
-│   ├── genetic_map.py    # Genetic Algorithm map generation
+│   ├── genetic_map.cpp   # Genetic Algorithm map generation
 │   ├── SA.cpp            # Simulated Annealing monster movement
 │   ├── greedy.py         # Greedy multi-monster chase controller
 │   └── minimax.py        # Minimax multi-monster chase controller
@@ -248,11 +244,8 @@ The page has two entry points:
 - Chase mode: control the monster one direction at a time; the human responds
   with BFS after every two monster moves.
 
-Each new game generates a fresh 30 x 30 map with:
-
-```python
-generate_map_ga(pop_size=30, generations=20, mutation_rate=0.01, elite_num=5)
-```
+Each new game runs the bundled C++ Genetic Algorithm to generate a fresh
+30 x 30 map and spawn coordinates.
 
 Map generation prints GA progress in the server terminal and can take a moment.
 
