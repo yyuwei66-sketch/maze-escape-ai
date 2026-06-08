@@ -11,6 +11,7 @@ ai/finetune.md
 paper/report.md
 __pycache__/
 # LaTeX temporary files
+.texmf-var/
 *.aux
 *.bbl
 *.bcf
@@ -28,6 +29,7 @@ __pycache__/
 *.snm
 *.vrb
 *.xdv
+missfont.log
 
 # Python temporary files
 __pycache__/
