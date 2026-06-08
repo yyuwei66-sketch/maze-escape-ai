@@ -1,1 +1,29 @@
 \subsubsection{Simulated Annealing}
+
+In the third difficulty, 
+we use Simulated Annealing to plan the route for the monster AI.
+Although Simulated Annealing can not guarantee finding the shortest path,
+it can still be used to obtain a near-optimal path, 
+which is sufficient for our Monster AI.
+
+Initially, the initial state is built by greedy search
+with toroidal Manhattan distance as its heuristic function.
+However, after some tests, we found that in some cases,
+greedy search might fail to reach the target,
+causing the entire simulated annealing process to fail.
+Therefore, we used Depth-First Search(DFS) to generate the initial state.
+The DFS prefers moves that are closer to the human using toroidal Manhattan distance,
+but it also shuffles candidates so the path is not completely deterministic.
+Several tests proved that this metric is effective enough to ensure reaching the target state,
+and the time complexity is also acceptable because of its preference for smaller Manhattan distance.
+
+The Simulated Anealing generates neibour solution by cutting the current path at a random point 
+and trying to rebuild the remaining path from that cut point to the human.
+The cost of each state is calculated by the following function:
+\[
+S(P)=|P|+
+\begin{cases}
+0, & p_{\mathrm{end}} = h,\\
+50D(p_{\mathrm{end}},h)+1000, & p_{\mathrm{end}} \neq h.
+\end{cases}
+\]

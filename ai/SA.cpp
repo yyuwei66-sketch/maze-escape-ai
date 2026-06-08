@@ -151,17 +151,8 @@ vector<Point> makeInitialPath()
 double scorePath(const vector<Point>& path)
 {
     Point target={xh,yh};
-    int repeated[MAP_SIZE][MAP_SIZE]={0};
-    int repeatPenalty=0;
-
-    for(const Point& p:path)
-    {
-        repeated[p.x][p.y]++;
-        if(repeated[p.x][p.y]>1)repeatPenalty++;
-    }
-
     int distance=torusDistance(path.back(),target);
-    double score=(double)path.size()+repeatPenalty*2.0;
+    double score=(double)path.size();
 
     if(!samePoint(path.back(),target))score+=distance*50.0+1000.0;
     return score;
