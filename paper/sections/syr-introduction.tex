@@ -7,12 +7,18 @@ This project shows how artificial intelligence behaves under limited, competitiv
 \section{Introduction}
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.8\textwidth]{system.png}
+    \IfFileExists{system.png}{
+        \includegraphics[width=0.8\textwidth]{system.png}
+    }{
+        \fbox{\parbox[c][4cm][c]{0.75\textwidth}{
+            \centering Missing image: \texttt{system.png}
+        }}
+    }
     \caption{Game System}
     \label{fig:example}
 \end{figure}
 
-In the course ”Principles of Artificial Intelligence“, we learned a variety of search, planning and optimization algorithms. Based on these core algorithms, our maze escape project improves static single-intelligent path search to dynamic multi-dimensional confrontation scenarios: in order to achieve this transformation, we introduce randomly generated maze maps based on genetic algorithms, expand dimensional space and create two-way tracking mechanisms.
+In the course ``Principles of Artificial Intelligence'', we learned a variety of search, planning and optimization algorithms. Based on these core algorithms, our maze escape project improves static single-intelligent path search to dynamic multi-dimensional confrontation scenarios: in order to achieve this transformation, we introduce randomly generated maze maps based on genetic algorithms, expand dimensional space and create two-way tracking mechanisms.
 
 In order to comprehensively evaluate these algorithms, we have designed two complementary game modes: escape mode and chase mode. In the chase mode, the actions of human characters are driven by circumvention algorithms based on breadth priority search (BFS); and for the core task of chasing predators and prey, the project adopts four different intelligent strategies:
 
@@ -21,7 +27,7 @@ In order to comprehensively evaluate these algorithms, we have designed two comp
 
     \item \textbf{Greedy Algorithm:} It calculates a distance field centered at the player's current position, causing monsters to always move toward the nearest neighboring node. This pursuit method is highly efficient and requires low computational resources.
 
-    \item \textbf{Minimax Decision Tree:} reats the pursuit process as a two-player game. The algorithm combines α-β pruning with a substitution table to predict subsequent moves. The monster aims to reduce the player's safety score during the game, while simultaneously simulating the player's efforts to improve it, enabling efficient pursuit from both perspectives.
+    \item \textbf{Minimax Decision Tree:} treats the pursuit process as a two-player game. The algorithm combines $\alpha$-$\beta$ pruning with a substitution table to predict subsequent moves. The monster aims to reduce the player's safety score during the game, while simultaneously simulating the player's efforts to improve it, enabling efficient pursuit from both perspectives.
 
     \item \textbf{Simulated Annealing Algorithm:} The algorithm first generates an initial movement path and then randomly adjusts it through repeated iterations. Following the cooling strategy, the system accepts suboptimal moves with a certain probability, making the monster's actions more random and harder to predict.
 
