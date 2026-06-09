@@ -131,6 +131,80 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(second.status_code, 400)
         self.assertIn("ended", second.get_json()["error"])
 
+    def test_items_are_serialized_on_creation(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 1}
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(len(data["items"]), 1)
+        self.assertIn(data["items"][0]["type"], main.ITEM_KINDS)
+        self.assertIn("effects", data)
+
+    def test_speed_boots_grant_two_extra_steps_in_same_direction(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 10)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.items = [main.ItemState(type="speed_boots", pos=(1, 0))]
+
+        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertEqual(data["human"], {"row": 3, "col": 0})
+        self.assertEqual(data["items"], [])
+
+    def test_home_stone_returns_human_to_spawn_and_stops_extra_movement(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 10)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.items = [main.ItemState(type="home_stone", pos=(1, 0))]
+
+        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+
+        self.assertEqual(move.status_code, 200)
+        self.assertEqual(move.get_json()["human"], {"row": 0, "col": 0})
+
+    def test_freeze_trap_stops_monster_after_it_steps_on_trap(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.traps = [main.ItemState(type="freeze_trap", pos=(0, 3), lifetime=15)]
+
+        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertEqual(data["monster_states"][0]["frozen_turns"], 2)
+        self.assertEqual(data["traps"], [])
+
+    def test_invisibility_cloak_prevents_monster_move_for_turn(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.items = [main.ItemState(type="invisibility_cloak", pos=(1, 0))]
+
+        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertEqual(data["monsters"], [{"row": 0, "col": 5}])
+        self.assertEqual(data["effects"]["human_invisible_turns"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

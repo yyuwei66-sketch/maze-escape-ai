@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import random
 from typing import Any, Dict, List, Sequence, Tuple
 import uuid
 
@@ -19,6 +20,7 @@ from ai import (
 )
 
 Pos = Tuple[int, int]
+ItemKind = str
 
 VALID_DIRECTIONS = {
     "up": (-1, 0),
@@ -28,15 +30,55 @@ VALID_DIRECTIONS = {
 }
 ESCAPE_AIS = {"astar", "greedy", "minimax", "sa"}
 CHASE_AI = "bfs"
+ITEM_KINDS: tuple[ItemKind, ...] = (
+    "speed_boots",
+    "home_stone",
+    "freeze_trap",
+    "invisibility_cloak",
+)
+ITEM_LABELS = {
+    "speed_boots": "Speed Boots",
+    "home_stone": "Home Stone",
+    "freeze_trap": "Freeze Trap",
+    "invisibility_cloak": "Invisibility Cloak",
+}
+ITEM_SYMBOLS = {
+    "speed_boots": "S",
+    "home_stone": "T",
+    "freeze_trap": "F",
+    "invisibility_cloak": "C",
+}
+ITEM_SPAWN_COUNT = 2
+ITEM_SPAWN_INTERVAL = 10
+FREEZE_TRAP_LIFETIME = 15
 
 app = Flask(__name__)
 games: Dict[str, "GameState"] = {}
 
 
 @dataclass
+class ItemState:
+    type: ItemKind
+    pos: Pos
+    active: bool = True
+    lifetime: int = -1
+
+    def serialize(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "name": ITEM_LABELS.get(self.type, self.type),
+            "symbol": ITEM_SYMBOLS.get(self.type, "?"),
+            "pos": pos_to_json(self.pos),
+            "active": self.active,
+            "lifetime": self.lifetime,
+        }
+
+
+@dataclass
 class GameState:
     grid: List[List[int]]
     human: Pos
+    human_spawn: Pos
     monsters: List[Pos]
     mode: str
     opponent_ai: str
@@ -44,6 +86,12 @@ class GameState:
     pending_monster_steps: int = 0
     status: str = "running"
     message: str = ""
+    items: List[ItemState] = field(default_factory=list)
+    traps: List[ItemState] = field(default_factory=list)
+    cloak_already_spawned: bool = False
+    human_extra_steps: int = 0
+    human_invisible_turns: int = 0
+    monster_frozen_turns: List[int] = field(default_factory=list)
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def serialize(self) -> dict[str, Any]:
@@ -52,6 +100,17 @@ class GameState:
             "grid": self.grid,
             "human": pos_to_json(self.human),
             "monsters": [pos_to_json(pos) for pos in self.monsters],
+            "monster_states": [
+                {"pos": pos_to_json(pos), "frozen_turns": frozen}
+                for pos, frozen in zip(self.monsters, self.monster_frozen_turns)
+            ],
+            "items": [item.serialize() for item in self.items if item.active],
+            "traps": [trap.serialize() for trap in self.traps if trap.active],
+            "effects": {
+                "human_invisible_turns": self.human_invisible_turns,
+                "human_extra_steps": self.human_extra_steps,
+                "monster_frozen_turns": list(self.monster_frozen_turns),
+            },
             "mode": self.mode,
             "opponent_ai": self.opponent_ai,
             "step_count": self.step_count,
@@ -131,10 +190,14 @@ def create_game(payload: dict[str, Any]) -> GameState:
     game = GameState(
         grid=[list(row) for row in grid],
         human=human,
+        human_spawn=human,
         monsters=monsters,
         mode=mode,
         opponent_ai=opponent_ai,
+        monster_frozen_turns=[0 for _ in monsters],
     )
+    if mode == "escape":
+        spawn_random_items(game, int(payload.get("item_count", ITEM_SPAWN_COUNT)))
     update_status(game)
     games[game.game_id] = game
     return game
@@ -166,13 +229,152 @@ def torus_manhattan(a: Pos, b: Pos, grid: Sequence[Sequence[int]]) -> int:
     return min(dr, h - dr) + min(dc, w - dc)
 
 
+def random_item_type(cloak_already_spawned: bool) -> ItemKind:
+    total_weight = 90 if cloak_already_spawned else 95
+    roll = random.randint(1, total_weight)
+    if not cloak_already_spawned and roll <= 5:
+        return "invisibility_cloak"
+
+    current_offset = 0 if cloak_already_spawned else 5
+    if roll <= current_offset + 20:
+        return "home_stone"
+    if roll <= current_offset + 20 + 35:
+        return "freeze_trap"
+    return "speed_boots"
+
+
+def can_spawn_item(game: GameState, pos: Pos) -> bool:
+    pos = wrap_pos(pos, game.grid)
+    if not is_floor(game.grid, pos):
+        return False
+    if pos == game.human:
+        return False
+    if torus_manhattan(pos, game.human, game.grid) <= 1:
+        return False
+    if pos in game.monsters:
+        return False
+    if any(item.active and item.pos == pos for item in game.items):
+        return False
+    if any(trap.active and trap.pos == pos for trap in game.traps):
+        return False
+    return True
+
+
+def spawn_random_items(game: GameState, item_count: int = ITEM_SPAWN_COUNT) -> None:
+    if item_count <= 0 or not game.grid:
+        return
+
+    rows = len(game.grid)
+    cols = len(game.grid[0])
+    spawned = 0
+    attempts = 0
+    while spawned < item_count and attempts < 500:
+        attempts += 1
+        pos = (random.randint(0, rows - 1), random.randint(0, cols - 1))
+        if not can_spawn_item(game, pos):
+            continue
+
+        item_type = random_item_type(game.cloak_already_spawned)
+        if item_type == "invisibility_cloak":
+            game.cloak_already_spawned = True
+        game.items.append(
+            ItemState(
+                type=item_type,
+                pos=pos,
+                lifetime=FREEZE_TRAP_LIFETIME if item_type == "freeze_trap" else -1,
+            )
+        )
+        spawned += 1
+
+
+def update_trap_lifetimes(game: GameState) -> None:
+    for trap in game.traps:
+        if trap.active and trap.lifetime > 0:
+            trap.lifetime -= 1
+            if trap.lifetime <= 0:
+                trap.active = False
+
+
+def decay_effects_after_human_step(game: GameState) -> None:
+    update_trap_lifetimes(game)
+    if game.human_invisible_turns > 0:
+        game.human_invisible_turns -= 1
+    game.monster_frozen_turns = [
+        max(0, frozen - 1) for frozen in game.monster_frozen_turns
+    ]
+
+
+def apply_item_effect(game: GameState, item: ItemState) -> bool:
+    """Apply a picked-up item. Return True when movement should stop."""
+
+    if item.type == "speed_boots":
+        game.human_extra_steps += 2
+        item.active = False
+        return False
+    if item.type == "home_stone":
+        game.human = game.human_spawn
+        game.human_extra_steps = 0
+        item.active = False
+        return True
+    if item.type == "freeze_trap":
+        game.traps.append(
+            ItemState(
+                type="freeze_trap",
+                pos=item.pos,
+                active=True,
+                lifetime=FREEZE_TRAP_LIFETIME,
+            )
+        )
+        item.active = False
+        return False
+    if item.type == "invisibility_cloak":
+        game.human_invisible_turns = 3
+        game.cloak_already_spawned = True
+        item.active = False
+        return False
+    return False
+
+
+def check_player_item_pickup(game: GameState) -> bool:
+    for item in game.items:
+        if item.active and item.pos == game.human:
+            return apply_item_effect(game, item)
+    return False
+
+
+def move_human_with_items(game: GameState, direction: str) -> None:
+    steps_taken = 0
+    max_steps = 1
+    while steps_taken < max_steps:
+        try:
+            game.human = move_one(game.grid, game.human, direction)
+        except ValueError:
+            if steps_taken == 0:
+                raise
+            game.human_extra_steps = 0
+            break
+
+        steps_taken += 1
+        decay_effects_after_human_step(game)
+
+        before_extra_steps = game.human_extra_steps
+        stop_movement = check_player_item_pickup(game)
+        if stop_movement:
+            game.human_extra_steps = 0
+            break
+
+        if game.human_extra_steps > before_extra_steps:
+            max_steps += game.human_extra_steps
+            game.human_extra_steps = 0
+
+
 def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
     assert_running(game)
     if game.mode == "escape":
         direction = str(payload.get("direction", "")).lower()
-        game.human = move_one(game.grid, game.human, direction)
+        move_human_with_items(game, direction)
         if not catches_human(game):
-            game.monsters = move_monsters(game)
+            game.monsters = move_monsters_with_item_effects(game)
     else:
         direction = str(payload.get("direction", "")).lower()
         game.monsters[0] = move_one(game.grid, game.monsters[0], direction)
@@ -188,11 +390,123 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
         return
 
     game.step_count += 1
+    if game.mode == "escape" and game.step_count % ITEM_SPAWN_INTERVAL == 0:
+        spawn_random_items(game, ITEM_SPAWN_COUNT)
     update_status(game)
 
 
 def catches_human(game: GameState) -> bool:
     return any(monster == game.human for monster in game.monsters)
+
+
+def check_monster_trap(game: GameState, monster_index: int) -> bool:
+    for trap in game.traps:
+        if trap.active and trap.pos == game.monsters[monster_index]:
+            game.monster_frozen_turns[monster_index] = 2
+            trap.active = False
+            return True
+    return False
+
+
+def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
+    while len(game.monster_frozen_turns) < len(game.monsters):
+        game.monster_frozen_turns.append(0)
+
+    if game.human_invisible_turns > 0:
+        return list(game.monsters)
+
+    paths = planned_monster_paths(game)
+    next_monsters = list(game.monsters)
+    for index, path in enumerate(paths):
+        if index >= len(next_monsters):
+            break
+        if game.monster_frozen_turns[index] > 0:
+            continue
+
+        for pos in path[1:]:
+            next_monsters[index] = pos
+            game.monsters[index] = pos
+            if check_monster_trap(game, index):
+                break
+            if pos == game.human:
+                break
+    return next_monsters
+
+
+def planned_monster_paths(game: GameState) -> List[List[Pos]]:
+    ai_name = game.opponent_ai
+    if ai_name == "astar":
+        return planned_astar_paths(game)
+    if ai_name in {"greedy", "minimax"}:
+        return planned_controller_paths(game, ai_name)
+    if ai_name == "sa":
+        _, monster = run_cpp_map_algorithm(
+            "sa",
+            game.grid,
+            game.human,
+            game.monsters[0],
+        )
+        return [[game.monsters[0], monster]]
+    raise ValueError(f"unsupported monster AI: {ai_name}")
+
+
+def planned_astar_paths(game: GameState) -> List[List[Pos]]:
+    if len(game.monsters) == 1:
+        return [limited_path(game.grid, game.monsters[0], game.human, 2)]
+
+    m1, m2 = game.monsters[:2]
+    d1 = torus_manhattan(m1, game.human, game.grid)
+    d2 = torus_manhattan(m2, game.human, game.grid)
+    if d1 <= d2:
+        return [
+            limited_path(game.grid, m1, game.human, 2),
+            limited_path(game.grid, m2, intercept_point(game.grid, m1, game.human), 1),
+        ]
+    return [
+        limited_path(game.grid, m1, intercept_point(game.grid, m2, game.human), 1),
+        limited_path(game.grid, m2, game.human, 2),
+    ]
+
+
+def limited_path(
+    grid: Sequence[Sequence[int]],
+    start: Pos,
+    goal: Pos,
+    steps: int,
+) -> List[Pos]:
+    path = astar([list(row) for row in grid], start, goal)
+    if not path:
+        return [start]
+    return path[: steps + 1]
+
+
+def planned_controller_paths(game: GameState, controller_name: str) -> List[List[Pos]]:
+    walls = walls_from_grid(game.grid)
+    width = len(game.grid[0])
+    height = len(game.grid)
+    human_xy = (game.human[1], game.human[0])
+    monsters_xy = many_row_col_to_xy(game.monsters)
+    if controller_name == "greedy":
+        ctrl = make_greedy_controller(
+            walls,
+            width=width,
+            height=height,
+            steps_per_turn=2,
+            allow_stay=False,
+            avoid_stacking=True,
+        )
+    else:
+        ctrl = make_minimax_controller(
+            walls,
+            width=width,
+            height=height,
+            steps_per_turn=2,
+            depth=2,
+            player_can_stay=False,
+            monster_can_stay=False,
+        )
+    paths = ctrl.decide(human_xy, monsters_xy)
+    return [many_xy_to_row_col(path) for path in paths]
 
 
 def move_monsters(game: GameState) -> List[Pos]:
@@ -427,11 +741,27 @@ INDEX_HTML = """<!doctype html>
       background: var(--wall);
     }
     .cell {
+      position: relative;
+      display: grid;
+      place-items: center;
       aspect-ratio: 1 / 1;
       border: 1px solid rgba(24, 33, 47, 0.08);
       background: var(--floor);
+      color: #172033;
+      font-size: clamp(8px, 1.5vh, 14px);
+      font-weight: 800;
+      line-height: 1;
     }
     .wall { background: var(--wall); }
+    .item-speed_boots { background: #ffd43b; }
+    .item-home_stone { background: #4dabf7; color: #082f49; }
+    .item-freeze_trap { background: #74c0fc; color: #0c4a6e; }
+    .item-invisibility_cloak { background: #9775fa; color: #ffffff; }
+    .trap {
+      background: #e7f5ff;
+      color: #075985;
+      box-shadow: inset 0 0 0 2px #228be6;
+    }
     .human { background: var(--human); }
     .monster { background: var(--monster); }
     .caught { background: #111827; }
@@ -521,12 +851,30 @@ INDEX_HTML = """<!doctype html>
       if (!game) return;
       const humanKey = `${game.human.row},${game.human.col}`;
       const monsterKeys = new Set(game.monsters.map(m => `${m.row},${m.col}`));
+      const itemsByKey = new Map(
+        (game.items || []).map(item => [`${item.pos.row},${item.pos.col}`, item])
+      );
+      const trapsByKey = new Map(
+        (game.traps || []).map(trap => [`${trap.pos.row},${trap.pos.col}`, trap])
+      );
       for (let r = 0; r < game.grid.length; r++) {
         for (let c = 0; c < game.grid[r].length; c++) {
           const cell = document.createElement("div");
           const key = `${r},${c}`;
+          const item = itemsByKey.get(key);
+          const trap = trapsByKey.get(key);
           cell.className = "cell";
           if (game.grid[r][c] === 1) cell.classList.add("wall");
+          if (item) {
+            cell.classList.add(`item-${item.type}`);
+            cell.textContent = item.symbol;
+            cell.title = item.name;
+          }
+          if (trap) {
+            cell.classList.add("trap");
+            cell.textContent = trap.symbol;
+            cell.title = `${trap.name} (${trap.lifetime} steps)`;
+          }
           if (key === humanKey) cell.classList.add("human");
           if (monsterKeys.has(key)) cell.classList.add(key === humanKey ? "caught" : "monster");
           board.appendChild(cell);
