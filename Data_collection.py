@@ -1,142 +1,11 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence, Tuple
-import uuid
 import json
 import os
-from collections import defaultdict
-
-REPLAY_LOG = "replay_log.jsonl" 
-
-# ============================================================
-# PLAYER BEHAVIOR DATA COLLECTION
-# ============================================================
-
-# Save player history per game session
-PLAYER_HISTORY = defaultdict(list)
-
-# Player direction vectors
-DIRECTION_VECTOR = {
-    "up": (-1, 0),
-    "down": (1, 0),
-    "left": (0, -1),
-    "right": (0, 1),
-}
-
-
-def get_relative_direction(human, monster):
-    """Calculate the relative direction from monster to human"""
-    dx = human[0] - monster[0]
-    dy = human[1] - monster[1]
-
-    if abs(dx) > abs(dy):
-        if dx > 0:
-            return "up"
-        else:
-            return "down"
-    else:
-        if dy > 0:
-            return "left"
-        else:
-            return "right"
-
-
-def get_average_direction(history):
-    """Calculate average movement direction from last 3 moves"""
-    if len(history) < 3:
-        return (0.0, 0.0)
-
-    recent = history[-3:]
-
-    vx = 0
-    vy = 0
-
-    for d in recent:
-        dx, dy = DIRECTION_VECTOR[d]
-        vx += dx
-        vy += dy
-
-    return (
-        vx / 3.0,
-        vy / 3.0
-    )
-
-
-def _log_step(
-    game_id,
-    grid,
-    before,
-    direction,
-    after_human,
-    after_monsters,
-    status,
-    opponent_ai,
-):
-    """
-    Automatically record player behavior for training data
-    """
-
-    human = before["human"]
-    monster = before["monsters"][0]
-
-    # Current game history
-    history = PLAYER_HISTORY[game_id]
-
-    # Player's previous direction
-    if len(history) == 0:
-        previous_direction = "up"
-    else:
-        previous_direction = history[-1]
-
-    # Average trend of last three steps
-    avg_dx, avg_dy = get_average_direction(history)
-
-    # Monster's relative direction to player
-    relative_direction = get_relative_direction(human, monster)
-
-    # Torus distance between player and monster
-    distance = torus_manhattan(
-        tuple(human),
-        tuple(monster),
-        grid
-    )
-
-    # Final training sample
-    record = {
-        # Player position
-        "human_row": human[0],
-        "human_col": human[1],
-
-        # Monster position
-        "monster_row": monster[0],
-        "monster_col": monster[1],
-
-        # Monster's relative direction
-        "relative_direction": relative_direction,
-
-        # Player's previous action
-        "previous_direction": previous_direction,
-
-        # Average trend of last three steps
-        "avg_dx": avg_dx,
-        "avg_dy": avg_dy,
-
-        # Distance between player and monster
-        "distance": distance,
-
-        # Player's actual action (label)
-        "action": direction
-    }
-
-    # Automatically write to replay_log.jsonl
-    with open(REPLAY_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
-
-    # Update history
-    history.append(direction)
-
-# ============================================================
+import uuid
 
 from flask import Flask, jsonify, request
 
@@ -163,6 +32,23 @@ VALID_DIRECTIONS = {
 }
 ESCAPE_AIS = {"astar", "greedy", "minimax", "sa"}
 CHASE_AI = "bfs"
+
+# ── Recording ─────────────────────────────────────────────────────────────────────
+REPLAY_LOG     = "replay_log.jsonl"
+PLAYER_HISTORY: Dict[str, List[str]] = defaultdict(list)  # game_id -> [dir, ...]
+
+# ── ML Predictor (lazy loading, falls back to old logic if model file doesn't exist) ────
+_ml_predictor = None
+
+def _get_predictor():
+    global _ml_predictor
+    if _ml_predictor is None:
+        try:
+            from ml_train import MLPredictor
+            _ml_predictor = MLPredictor()
+        except Exception:
+            _ml_predictor = None   # Keep None if model is not trained
+    return _ml_predictor
 
 app = Flask(__name__)
 games: Dict[str, "GameState"] = {}
@@ -310,90 +196,70 @@ def torus_manhattan(a: Pos, b: Pos, grid: Sequence[Sequence[int]]) -> int:
     return min(dr, h - dr) + min(dc, w - dc)
 
 
+def _log_step(game: GameState, direction: str) -> None:
+    """Record player move for training data"""
+    grid    = game.grid
+    human   = game.human
+    monster = game.monsters[0]
+    history = PLAYER_HISTORY[game.game_id]   # History before this move
+    H, W    = len(grid), len(grid[0])
+
+    feat: dict = {}
+
+    # Normalized positions
+    feat["human_row"]   = human[0]   / H
+    feat["human_col"]   = human[1]   / W
+    feat["monster_row"] = monster[0] / H
+    feat["monster_col"] = monster[1] / W
+
+    # Walls around player
+    for d_name, (dr, dc) in VALID_DIRECTIONS.items():
+        nr = (human[0] + dr) % H
+        nc = (human[1] + dc) % W
+        feat[f"wall_{d_name}"] = 0 if int(grid[nr][nc]) == 0 else 1
+
+    # Previous step direction (one-hot)
+    prev1 = history[-1] if len(history) >= 1 else None
+    for d in VALID_DIRECTIONS:
+        feat[f"prev_{d}_1"] = 1 if prev1 == d else 0
+
+    # Second previous step direction (one-hot)
+    prev2 = history[-2] if len(history) >= 2 else None
+    for d in VALID_DIRECTIONS:
+        feat[f"prev_{d}_2"] = 1 if prev2 == d else 0
+
+    record = {"features": feat, "label": direction}
+    with open(REPLAY_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    # Update history after logging (so the record doesn't include this move)
+    history.append(direction)
+
+
 def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
-
     assert_running(game)
-
     if game.mode == "escape":
-
-        direction = str(
-            payload.get("direction", "")
-        ).lower()
-
-        # =====================================================
-        # Capture state before move
-        # =====================================================
-
-        snapshot_before = {
-            "human": list(game.human),
-            "monsters": [
-                list(m) for m in game.monsters
-            ],
-            "step": game.step_count,
-        }
-
-        # =====================================================
-        # Player move
-        # =====================================================
-
-        game.human = move_one(
-            game.grid,
-            game.human,
-            direction
-        )
-
-        # =====================================================
-        # Monster move
-        # =====================================================
-
+        direction = str(payload.get("direction", "")).lower()
+        _log_step(game, direction)                    # ← Recording
+        game.human = move_one(game.grid, game.human, direction)
         if not catches_human(game):
             game.monsters = move_monsters(game)
-
-        game.step_count += 1
-
-        update_status(game)
-
-        # =====================================================
-        # Automatically record training data
-        # =====================================================
-
-        _log_step(
-            game_id=game.game_id,
-            grid=game.grid,
-            before=snapshot_before,
-            direction=direction,
-            after_human=list(game.human),
-            after_monsters=[
-                list(m) for m in game.monsters
-            ],
-            status=game.status,
-            opponent_ai=game.opponent_ai,
-        )
-
     else:
-
-        direction = str(
-            payload.get("direction", "")
-        ).lower()
-
-        game.monsters[0] = move_one(
-            game.grid,
-            game.monsters[0],
-            direction
-        )
-
+        direction = str(payload.get("direction", "")).lower()
+        game.monsters[0] = move_one(game.grid, game.monsters[0], direction)
         game.pending_monster_steps += 1
-
         if catches_human(game):
             game.step_count += 1
             game.pending_monster_steps = 0
-
         elif game.pending_monster_steps >= 2:
             game.human = move_human_with_bfs(game)
             game.step_count += 1
             game.pending_monster_steps = 0
-
         update_status(game)
+        return
+
+    game.step_count += 1
+    update_status(game)
 
 
 def catches_human(game: GameState) -> bool:
@@ -426,15 +292,38 @@ def move_monsters_astar(game: GameState) -> List[Pos]:
     m1, m2 = game.monsters[:2]
     d1 = torus_manhattan(m1, game.human, game.grid)
     d2 = torus_manhattan(m2, game.human, game.grid)
+
+    # Closer monster chases directly, farther monster uses ML to predict target
     if d1 <= d2:
-        return [
-            advance_along_path(game.grid, m1, game.human, 2),
-            advance_along_path(game.grid, m2, intercept_point(game.grid, m1, game.human), 1),
-        ]
-    return [
-        advance_along_path(game.grid, m1, intercept_point(game.grid, m2, game.human), 1),
-        advance_along_path(game.grid, m2, game.human, 2),
-    ]
+        chaser,    interceptor    = m1, m2
+        chaser_d,  intercept_d   = d1, d2
+    else:
+        chaser,    interceptor    = m2, m1
+        chaser_d,  intercept_d   = d2, d1
+
+    # Monster 1 (closer): A* directly chases current position
+    new_chaser = advance_along_path(game.grid, chaser, game.human, 2)
+
+    # Monster 2 (farther): Use ML to predict player position 3 steps ahead as intercept target
+    #   If model is not trained, fall back to original intercept_point
+    predictor = _get_predictor()
+    if predictor is not None:
+        history = PLAYER_HISTORY.get(game.game_id, [])
+        target  = predictor.predict_future_pos(
+            game.grid, game.human, game.monsters[0], history, steps=3
+        )
+        # If predicted point is a wall, fall back to intercept_point
+        if not is_floor(game.grid, target):
+            target = intercept_point(game.grid, chaser, game.human)
+    else:
+        target = intercept_point(game.grid, chaser, game.human)
+
+    new_interceptor = advance_along_path(game.grid, interceptor, target, 2)
+
+    # Keep original return order [m1 new position, m2 new position]
+    if d1 <= d2:
+        return [new_chaser, new_interceptor]
+    return [new_interceptor, new_chaser]
 
 
 def advance_along_path(
@@ -545,7 +434,6 @@ def post_move(game_id: str):
     except (ValueError, CppAlgorithmError) as exc:
         return json_error(str(exc), 400)
     return jsonify(game.serialize())
-
 
 
 INDEX_HTML = """<!doctype html>
