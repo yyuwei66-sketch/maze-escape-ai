@@ -2,13 +2,17 @@
 
 Several tests are used to validate the project.
 
-\subsection{Map Generation Test}
+\subsection{Map Generation and Spawn Test}
 
-The generated map should have 30 rows and 30 columns. Each cell should only contain 0 or 1. The wall ratio should be reasonable, and most walkable cells should be connected.
+The map generation module is tested through several validation steps. First, the program checks whether the generated map size is exactly $30 \times 30$ and whether all cell values are strictly either \texttt{0} or \texttt{1}. This step ensures that the generated map follows the correct format before it is used by the main game program.
 
-\subsection{Spawn Test}
+Second, BFS-based connectivity checking is used to evaluate whether the walkable cells are sufficiently connected. This helps prevent the map from being divided into isolated regions where the human and monsters cannot reach each other. Since the game uses a wrap-around boundary, BFS is performed based on the same neighbour calculation used in the game movement logic.
 
-The human and monster should spawn on walkable cells. They should not spawn on the same position. Their starting distance should also be within a reasonable range to avoid unfair gameplay.
+Third, the wall density is checked against the target wall ratio. In this project, the target wall ratio is around $0.28$. A map with too few walls may make the chase too direct, while a map with too many walls may block movement and reduce playability. Therefore, the wall ratio is included in the fitness function to keep the map at a balanced level.
+
+The spawn points are also validated before the map is used. The human and monsters must start on valid walkable cells, and their positions cannot be the same. The distance between the human and monster spawn points is checked by BFS path distance instead of simple Manhattan distance, because the map contains walls and uses wrap-around boundaries. In the final implementation, the spawn distance is controlled between $10$ and $25$ BFS steps. This makes the starting positions more suitable for a chase game, because the monster will not catch the human immediately, but it will also not start too far away.
+
+Finally, the generated map is saved as \texttt{map/generated\_map.txt} and loaded into the main game program. If the main system can correctly load the map and complete human movement, monster chasing, and collision detection, then the map generation module can be considered successfully integrated with the game system. With these checks, the generated map is more than a purely random result, since it satisfies the basic requirements for movement, chasing, and integration with the main game system.
 
 \subsection{Boundary Test}
 
