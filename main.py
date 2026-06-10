@@ -882,7 +882,13 @@ INDEX_HTML = """<!doctype html>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      game = await response.json();
+      const payload = await response.json();
+      if (!response.ok) {
+        game = null;
+        meta.textContent = payload.error || "Could not create game";
+        return;
+      }
+      game = payload;
       render();
     }
 

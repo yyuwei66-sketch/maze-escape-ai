@@ -219,11 +219,49 @@ python -m pip install -r requirements.txt
 
 You can also use a virtual environment:
 
+macOS / Linux:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Windows Command Prompt:
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install -r requirements.txt
+```
+
+### Windows C++ Compiler
+
+Map generation, BFS, and Simulated Annealing use bundled C++17 programs. Install
+one of these compilers and make sure it is available on `PATH`:
+
+- MSYS2 / MinGW-w64 `g++`
+- LLVM `clang++`
+- Visual Studio Build Tools `cl` (run the project from a Developer PowerShell
+  or Developer Command Prompt)
+
+You can select a compiler explicitly with the `CXX` environment variable:
+
+```powershell
+$env:CXX = "g++"
+python main.py
+```
+
+On Windows the backend builds `ai\bfs_escape.exe`, `ai\SA.exe`, and
+`ai\genetic_map.exe` automatically. Existing macOS/Linux binaries are ignored.
 
 ## Running the Flask Game
 
@@ -343,8 +381,9 @@ g++ -std=c++17 SA.cpp -o SA
 Both programs update `map/generated_map.txt` after computing the next move.
 
 The Flask backend auto-detects these executables. If an executable is missing,
-it tries to compile it with `g++ -std=c++17`; if compilation fails, the related
-API request returns a clear JSON error while the Flask app remains usable.
+it tries the compiler configured by `CXX`, then `g++`, `clang++`, and MSVC
+`cl`. If compilation fails, the related API request and browser UI show a clear
+error while the Flask app remains usable.
 
 ## Report
 

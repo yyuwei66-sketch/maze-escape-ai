@@ -7,9 +7,11 @@ application boundary instead of leaking that difference into JSON.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Iterable, Literal, Sequence, Tuple
 
@@ -35,9 +37,17 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 BFS_ESCAPE_SOURCE = PACKAGE_DIR / "bfs_escape.cpp"
 SA_SOURCE = PACKAGE_DIR / "SA.cpp"
 GENETIC_MAP_SOURCE = PACKAGE_DIR / "genetic_map.cpp"
-BFS_ESCAPE_EXECUTABLE = PACKAGE_DIR / "bfs_escape"
-SA_EXECUTABLE = PACKAGE_DIR / "SA"
-GENETIC_MAP_EXECUTABLE = PACKAGE_DIR / "genetic_map"
+
+
+def _cpp_target_path(stem: str, platform_name: str | None = None) -> Path:
+    platform_name = platform_name or sys.platform
+    suffix = ".exe" if platform_name == "win32" else ""
+    return PACKAGE_DIR / f"{stem}{suffix}"
+
+
+BFS_ESCAPE_EXECUTABLE = _cpp_target_path("bfs_escape")
+SA_EXECUTABLE = _cpp_target_path("SA")
+GENETIC_MAP_EXECUTABLE = _cpp_target_path("genetic_map")
 
 _CPP_TARGETS = {
     "bfs": (BFS_ESCAPE_SOURCE, BFS_ESCAPE_EXECUTABLE),
@@ -48,6 +58,50 @@ _CPP_TARGETS = {
 
 class CppAlgorithmError(RuntimeError):
     """Raised when a bundled C++ algorithm cannot be compiled or executed."""
+
+
+def _find_cpp_compiler() -> str | None:
+    candidates = []
+    configured_compiler = os.environ.get("CXX")
+    if configured_compiler:
+        candidates.append(configured_compiler)
+    candidates.extend(("g++", "clang++", "cl"))
+
+    for candidate in candidates:
+        compiler = shutil.which(candidate)
+        if compiler:
+            return compiler
+    return None
+
+
+def _uses_msvc_flags(compiler: str) -> bool:
+    compiler_name = compiler.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return compiler_name in {"cl", "cl.exe", "clang-cl", "clang-cl.exe"}
+
+
+def _cpp_compile_command(
+    compiler: str,
+    source: Path,
+    executable: Path,
+) -> list[str]:
+    if _uses_msvc_flags(compiler):
+        return [
+            compiler,
+            "/nologo",
+            "/O2",
+            "/EHsc",
+            "/std:c++17",
+            str(source),
+            f"/Fe:{executable}",
+        ]
+    return [
+        compiler,
+        "-O2",
+        "-std=c++17",
+        str(source),
+        "-o",
+        str(executable),
+    ]
 
 
 def ensure_cpp_executable(algorithm: CppAlgorithm) -> Path:
@@ -68,12 +122,15 @@ def ensure_cpp_executable(algorithm: CppAlgorithm) -> Path:
     ):
         return executable
 
-    compiler = shutil.which("g++")
+    compiler = _find_cpp_compiler()
     if compiler is None:
-        raise CppAlgorithmError("g++ is required to compile the C++ AI modules")
+        raise CppAlgorithmError(
+            "a C++17 compiler is required; install g++, clang++, or MSVC cl, "
+            "or set the CXX environment variable"
+        )
 
     result = subprocess.run(
-        [compiler, "-O2", "-std=c++17", str(source), "-o", str(executable)],
+        _cpp_compile_command(compiler, source, executable),
         capture_output=True,
         text=True,
         check=False,
