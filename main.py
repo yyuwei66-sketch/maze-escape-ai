@@ -165,6 +165,100 @@ def update_status(game: GameState) -> None:
         game.message = f"caught after {game.step_count} turns"
 
 
+def parse_spawn_line(lines: Sequence[str], label: str) -> Pos | None:
+    """Parse lines such as 'Human spawn: 17 18'."""
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith(label):
+            continue
+
+        parts = stripped.replace(":", " ").split()
+        numbers: list[int] = []
+        for part in parts:
+            if part.lstrip("-").isdigit():
+                numbers.append(int(part))
+
+        if len(numbers) >= 2:
+            return numbers[0], numbers[1]
+
+    return None
+
+
+def parse_genetic_map_from_debug_output(debug_text: str) -> tuple[List[List[int]], Pos, Pos]:
+    """
+    Fallback parser for genetic_map.exe debug output.
+
+    Some versions of genetic_map.exe print a visual 30x30 map to stdout/stderr:
+        . = floor
+        # = wall
+        H = human spawn
+        M = monster spawn
+
+    If run_cpp_genetic_map() treats that output as a failure, this parser
+    extracts grid, human spawn, and monster spawn directly from the debug text.
+    """
+    lines = debug_text.splitlines()
+
+    map_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if len(stripped) >= 30 and all(ch in ".#HM" for ch in stripped[:30]):
+            map_lines.append(stripped[:30])
+
+    if len(map_lines) < 30:
+        raise ValueError("could not parse generated map from genetic_map.exe output")
+
+    map_lines = map_lines[:30]
+
+    grid: List[List[int]] = []
+    human: Pos | None = None
+    monster: Pos | None = None
+
+    for row_index, line in enumerate(map_lines):
+        row: list[int] = []
+        for col_index, char in enumerate(line):
+            if char == "#":
+                row.append(1)
+            else:
+                row.append(0)
+
+            if char == "H":
+                human = (row_index, col_index)
+            elif char == "M":
+                monster = (row_index, col_index)
+
+        grid.append(row)
+
+    # If H/M are not embedded in the visual map, try the explicit spawn lines.
+    if human is None:
+        human = parse_spawn_line(lines, "Human spawn")
+
+    if monster is None:
+        monster = parse_spawn_line(lines, "Monster spawn")
+
+    if human is None or monster is None:
+        raise ValueError("could not parse human or monster spawn from genetic_map.exe output")
+
+    return grid, human, monster
+
+
+def load_genetic_map() -> tuple[List[List[int]], Pos, Pos]:
+    """
+    Load the map from the C++ genetic generator.
+
+    Normal path:
+        use ai.run_cpp_genetic_map()
+
+    Compatibility path:
+        if run_cpp_genetic_map() raises CppAlgorithmError but the C++ program
+        printed a complete visual map, parse that output instead.
+    """
+    try:
+        return run_cpp_genetic_map()
+    except CppAlgorithmError as exc:
+        return parse_genetic_map_from_debug_output(str(exc))
+
+
 def create_game(payload: dict[str, Any]) -> GameState:
     mode = str(payload.get("mode", "escape")).lower()
     if mode not in {"escape", "chase"}:
@@ -184,7 +278,7 @@ def create_game(payload: dict[str, Any]) -> GameState:
         opponent_ai = CHASE_AI
         monster_count = 1
 
-    grid, human, first_monster = run_cpp_genetic_map()
+    grid, human, first_monster = load_genetic_map()
     monsters = [first_monster]
     while len(monsters) < monster_count:
         extra = find_extra_monster_spawn(grid, human, monsters)
