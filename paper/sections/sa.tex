@@ -21,9 +21,56 @@ The Simulated Anealing generates neibour solution by cutting the current path at
 and trying to rebuild the remaining path from that cut point to the human.
 The cost of each state is calculated by the following function:
 \[
-S(P)=|P|+
+E(P)=Cost(P)-J(P)+Repeat(P)+\Delta(P).
+\]
+The first term is the chase cost:
+\[
+Cost(P)=|P|+3D_M(p_{\mathrm{move}},h)+0.5D_M(p_{\mathrm{end}},h).
+\]
+Here, \(|P|\) keeps the planned path short, \(p_{\mathrm{move}}\) is the
+position reached after the monster's two actual movement steps, and
+\(p_{\mathrm{end}}\) is the last point of the planned path. \(D_M(\cdot,h)\) is
+the toroidal Manhattan distance to the human. \(D_M(p_{\mathrm{move}},h)\) is
+added to encourage the monster to move towards the human, while
+\(D_M(p_{\mathrm{end}},h)\) is added to penalize routes that fail to reach the
+target. Since only the first two steps of the planned route are used in each
+round, the second term is given a larger weight than the third term.
+
+The second term rewards junction control:
+\[
+J(P)=\min\left(6,\sum_i j_i\right),
+\qquad
+j_i=
 \begin{cases}
-0, & p_{\mathrm{end}} = h,\\
-50D(p_{\mathrm{end}},h)+1000, & p_{\mathrm{end}} \neq h.
+2.0, & \deg(p_i)\ge 3\text{ and }i<6,\\
+0.5, & \deg(p_i)\ge 3\text{ and }i\ge 6,\\
+0, & \text{otherwise,}
 \end{cases}
 \]
+where \(\deg(p_i)\) is the number of walkable neighboring cells. Since
+\(J(P)\) is also subtracted, the monster is encouraged to pass through
+junctions, which gives it more possible future routes and makes its movement
+harder for the player to predict.
+
+The third term uses the previous SA move:
+\[
+Repeat(P)=10I(p_{\mathrm{move}}=p_{\mathrm{prev,start}}).
+\]
+This term penalizes immediately moving back to the previous starting cell. It
+adds a small amount of cross-turn variation.
+
+Finally, the fourth term adds small route variation:
+\[
+\Delta(P)=2\cdot \frac{1}{k}\sum_{i=0}^{k-1} \delta(p_i),
+\qquad
+k=\min(|P|,6),
+\]
+where \(\delta(p_i)\in[-1,1]\) is a random cell cost generated once at the start of
+the current SA run. This term is applied only to the first six cells because the
+monster only moves two steps after planning, so early route variation matters
+more than changes near the end of the path.
+
+Overall, the objective still minimizes path length and strongly prefers paths
+that move toward the human. The random, junction, and previous-move terms are
+deliberately smaller, so they mainly act as tie breakers between similar chase
+paths rather than making the monster wander randomly.

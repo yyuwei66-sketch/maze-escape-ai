@@ -102,6 +102,13 @@ mutated during web play.
 monster to the human, improves that path with Simulated Annealing, and writes the
 monster's moved position back to the map file.
 
+The SA objective still prioritizes short paths that move toward the human, but
+now adds lightweight gameplay terms. Each SA run generates small random cell
+costs for the early part of the path, rewards junction control, and can use the
+previous SA move to discourage immediately backtracking. These terms act as
+tie-breakers between similarly strong chase paths rather than replacing the
+main pursuit objective.
+
 The Flask backend exposes this as the `sa` monster AI in escape mode. Like BFS,
 it is run through a temporary map file.
 

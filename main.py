@@ -97,6 +97,7 @@ class GameState:
     human_extra_steps: int = 0
     human_invisible_turns: int = 0
     monster_frozen_turns: List[int] = field(default_factory=list)
+    sa_previous_move: Tuple[Pos, Pos] | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def serialize(self) -> dict[str, Any]:
@@ -558,6 +559,11 @@ def check_monster_trap(game: GameState, monster_index: int) -> bool:
     return False
 
 
+def remember_sa_move(game: GameState, start: Pos, end: Pos) -> None:
+    if game.opponent_ai == "sa" and start != end:
+        game.sa_previous_move = (start, end)
+
+
 def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
     while len(game.monster_frozen_turns) < len(game.monsters):
         game.monster_frozen_turns.append(0)
@@ -565,6 +571,13 @@ def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
     if game.human_invisible_turns > 0:
         return list(game.monsters)
 
+    if all(
+        frozen > 0
+        for frozen in game.monster_frozen_turns[:len(game.monsters)]
+    ):
+        return list(game.monsters)
+
+    previous_monsters = list(game.monsters)
     paths = planned_monster_paths(game)
     next_monsters = list(game.monsters)
     for index, path in enumerate(paths):
@@ -580,6 +593,8 @@ def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
                 break
             if pos == game.human:
                 break
+    if next_monsters:
+        remember_sa_move(game, previous_monsters[0], next_monsters[0])
     return next_monsters
 
 
@@ -595,6 +610,7 @@ def planned_monster_paths(game: GameState) -> List[List[Pos]]:
             game.grid,
             game.human,
             game.monsters[0],
+            sa_previous_move=game.sa_previous_move,
         )
         return [[game.monsters[0], monster]]
     raise ValueError(f"unsupported monster AI: {ai_name}")
@@ -668,12 +684,15 @@ def move_monsters(game: GameState) -> List[Pos]:
     if ai_name == "minimax":
         return move_monsters_controller(game, "minimax")
     if ai_name == "sa":
+        previous_monster = game.monsters[0]
         _, monster = run_cpp_map_algorithm(
             "sa",
             game.grid,
             game.human,
             game.monsters[0],
+            sa_previous_move=game.sa_previous_move,
         )
+        remember_sa_move(game, previous_monster, monster)
         return [monster]
     raise ValueError(f"unsupported monster AI: {ai_name}")
 

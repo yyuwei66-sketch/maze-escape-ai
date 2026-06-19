@@ -148,6 +148,7 @@ def run_cpp_map_algorithm(
     grid: Sequence[Sequence[int]],
     human: Pos,
     monster: Pos,
+    sa_previous_move: tuple[Pos, Pos] | None = None,
 ) -> tuple[Pos, Pos]:
     """Run a C++ map-mutating algorithm and return ``(human, monster)``.
 
@@ -165,7 +166,13 @@ def run_cpp_map_algorithm(
         map_dir.mkdir()
         work_dir.mkdir()
         map_path = map_dir / "generated_map.txt"
-        _write_cpp_map(map_path, grid, human, monster)
+        _write_cpp_map(
+            map_path,
+            grid,
+            human,
+            monster,
+            sa_previous_move=sa_previous_move if algorithm == "sa" else None,
+        )
 
         result = subprocess.run(
             [str(executable)],
@@ -269,12 +276,20 @@ def _write_cpp_map(
     grid: Sequence[Sequence[int]],
     human: Pos,
     monster: Pos,
+    sa_previous_move: tuple[Pos, Pos] | None = None,
 ) -> None:
     with path.open("w", encoding="utf-8") as f:
         for row in grid:
             f.write(" ".join(str(int(cell)) for cell in row) + "\n")
         f.write(f"{human[0]} {human[1]}\n")
         f.write(f"{monster[0]} {monster[1]}\n")
+        if sa_previous_move is not None:
+            move_from, move_to = sa_previous_move
+            f.write(
+                "1 "
+                f"{move_from[0]} {move_from[1]} "
+                f"{move_to[0]} {move_to[1]}\n"
+            )
 
 
 def _read_cpp_map(path: Path) -> tuple[list[list[int]], list[Pos]]:

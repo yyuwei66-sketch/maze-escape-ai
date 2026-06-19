@@ -116,6 +116,81 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(len(response.get_json()["monsters"]), 1)
 
+    def test_sa_game_starts_without_previous_move(self):
+        response = self.make_game({"mode": "escape", "opponent_ai": "sa"})
+        game_id = response.get_json()["game_id"]
+
+        self.assertIsNone(main.games[game_id].sa_previous_move)
+
+    def test_sa_move_records_and_reuses_previous_move(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "sa", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+
+        with patch(
+            "main.run_cpp_map_algorithm",
+            side_effect=[((1, 0), (0, 3)), ((2, 0), (0, 1))],
+        ) as run_algorithm:
+            first = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+            second = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(main.games[game_id].sa_previous_move, ((0, 3), (0, 1)))
+        self.assertIsNone(run_algorithm.call_args_list[0].kwargs["sa_previous_move"])
+        self.assertEqual(
+            run_algorithm.call_args_list[1].kwargs["sa_previous_move"],
+            ((0, 5), (0, 3)),
+        )
+
+    def test_sa_previous_move_is_not_updated_when_invisible(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "sa", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.items = [main.ItemState(type="invisibility_cloak", pos=(1, 0))]
+        game.sa_previous_move = ((0, 7), (0, 5))
+
+        with patch("main.run_cpp_map_algorithm") as run_algorithm:
+            move = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+
+        self.assertEqual(move.status_code, 200)
+        run_algorithm.assert_not_called()
+        self.assertEqual(game.sa_previous_move, ((0, 7), (0, 5)))
+
+    def test_sa_previous_move_is_not_updated_when_monster_frozen(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "sa", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.monster_frozen_turns = [2]
+        game.sa_previous_move = ((0, 7), (0, 5))
+
+        with patch("main.run_cpp_map_algorithm") as run_algorithm:
+            move = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+
+        self.assertEqual(move.status_code, 200)
+        run_algorithm.assert_not_called()
+        self.assertEqual(game.sa_previous_move, ((0, 7), (0, 5)))
+
     def test_ended_game_rejects_more_moves(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar"},

@@ -1,15 +1,31 @@
+# macOS
 .DS_Store
+
+# Editor settings
 .vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Project-generated files
 map/generated_map.txt
-.dSYM
-ai/bfs_escape.dSYM
-ai/bfs_escape
 ai/SA
+ai/bfs_escape
 ai/genetic_map
-ai/SA.dSYM/
+ai/*.dSYM/
 ai/finetune.md
 paper/report.md
-__pycache__/
+
 # LaTeX temporary files
 .texmf-var/
 *.aux
@@ -31,15 +47,10 @@ __pycache__/
 *.xdv
 missfont.log
 
-# Python temporary files
-__pycache__/
-*.pyc
-
-# VS Code settings, optional
-.vscode/
-
-# C++ build files
+# C/C++ build files
 *.exe
 *.o
 *.obj
-*.out
+*.so
+*.dylib
+*.dll
