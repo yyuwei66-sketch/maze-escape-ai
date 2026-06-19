@@ -104,27 +104,45 @@ paths rather than making the monster wander randomly.
 The SA parameters were tuned with two goals: the monster decision should be fast
 enough for real-time play, and the optimized path should still be shorter than
 the DFS initial path in most generated maps. The original setting used
-\(INNER\_LOOP=200\), an initial temperature of \(1000\), a minimum temperature
-of \(0.001\), and a cooling rate of \(0.995\). This produced about \(551600\)
-path mutations in one SA call. Although this setting could improve the path
-quality, the average wall-clock time on five generated maps was about
-\(3807.27\) ms, which was too slow for interactive gameplay.
+200 candidate path trials at each temperature level, an initial temperature of
+\(1000\), a minimum temperature of \(0.001\), and a cooling rate of \(0.995\).
+This produced about \(551600\) path mutations in one SA call. Although this
+setting could improve the path quality, the average wall-clock time on five
+generated maps was about \(3807.27\) ms, which was too slow for interactive
+gameplay.
 
 Therefore, we reduced the search budget step by step. The main parameters were
-\(INNER\_LOOP\), the initial temperature, the minimum temperature, the cooling
-rate, and \(DFS\_EXTEND\_SEARCH\_LIMIT\). Reducing \(INNER\_LOOP\) and using a
-faster cooling rate directly lowered the number of candidate paths tested.
-However, making the search too small also reduced the benefit of SA. For
-example, a very small configuration with about \(165\) mutations improved only
-one out of five maps, while a configuration with about \(450\) mutations still
-improved three out of five maps but was less reliable on difficult layouts.
+the number of candidate trials at each temperature level, the initial
+temperature, the minimum stopping temperature, the cooling rate, and the DFS
+search limit used when rebuilding a path after a random cut. Reducing the number
+of candidate trials and using a faster cooling rate directly lowered the number
+of candidate paths tested. However, making the search too small also reduced the
+benefit of SA. For example, a very small configuration with about \(165\)
+mutations improved only one out of five maps, while a configuration with about
+\(450\) mutations still improved three out of five maps but was less reliable
+on difficult layouts.
 
-The final configuration uses \(INNER\_LOOP=40\), initial temperature \(100\),
-minimum temperature \(0.1\), cooling rate \(0.97\), and
-\(DFS\_EXTEND\_SEARCH\_LIMIT=80\). This configuration performs about \(9080\)
-path mutations per SA call. In a test on five newly generated maps, all five
-runs finished within one second, with an average wall-clock time of
-\(280.00\) ms. The average DFS path length was \(65.4\), while the average SA
-path length was reduced to \(40.2\). This shows that the final parameters keep
-the algorithm responsive while preserving enough search quality to improve the
-initial DFS route.
+\begin{table}[H]
+\centering
+\caption{Representative simulated annealing tuning results}
+\begin{tabular}{lrrrr}
+\toprule
+Setting & Mutations & Avg. time (ms) & DFS/SA length & Improved maps \\
+\midrule
+Original setting & 551600 & 3807.27 & 49.0 / 35.0 & 4/5 \\
+Fast setting & 1800 & 37.09 & 49.0 / 41.4 & 4/5 \\
+Very small setting & 165 & -- & -- & 1/5 \\
+Final setting & 9080 & 280.00 & 65.4 / 40.2 & 5/5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The final configuration uses 40 candidate trials at each temperature level, an
+initial temperature of \(100\), a minimum stopping temperature of \(0.1\), a
+cooling rate of \(0.97\), and a reconnection DFS search limit of 80. This
+configuration performs about \(9080\) path mutations per SA call. In a test on
+five newly generated maps, all five runs finished within one second, with an
+average wall-clock time of \(280.00\) ms. The average DFS path length was
+\(65.4\), while the average SA path length was reduced to \(40.2\). This shows
+that the final parameters keep the algorithm responsive while preserving enough
+search quality to improve the initial DFS route.
