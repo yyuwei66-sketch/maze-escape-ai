@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="prefetch" href="/ui/gameover/gameover.html">
+<meta charset="UTF-8">
+<title>Maze Escape - Chase Mode</title>
+
+<style>
+@font-face {
+    font-family: 'Munro';
+    src: url('/ui/fonts/munro.ttf') format('truetype');
+}
+
+body{
+    margin:0;
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+    background-image:url('/ui/play/back.png');
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+}
+
+.game{
+    display:flex;
+    height:92vh;
+    border:8px solid rgba(70,40,15,0.9);
+    background:rgba(25,15,10,0.28);
+    backdrop-filter:blur(5px);
+    box-sizing:border-box;
+    border-radius:4px;
+}
+
+.left{
+    flex:1;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+canvas{
+    width:100%;
+    height:100%;
+    max-width:92vh;
+    max-height:92vh;
+    background:#222;
+    image-rendering:pixelated;
+}
+
+.right{
+    width:520px;
+    border-left:8px solid rgba(70,40,15,0.9);
+    padding:20px;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    height:100%;
+}
+
+.board-top{
+    background:url("/ui/play/wood.png");
+    background-size: 100% 100%;  
+    background-position: top center;
+    background-repeat:no-repeat;
+    height:200px;
+    padding:0 25px 0 25px;
+    box-sizing:border-box;
+    color:white;
+    font-size:18px;
+    line-height:1.8;
+    overflow:hidden;
+    font-family: 'Munro', monospace;
+    position: relative;
+}
+
+.board-bottom{
+    background:url("/ui/play/wooddown.png");
+    background-size:100% 100%;
+    background-position: bottom center;
+    background-repeat:no-repeat;
+    flex:1;
+    padding:65px 25px 25px 25px;
+    box-sizing:border-box;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    font-family: 'Munro', monospace;
+    position: relative; 
+}
+
+.inventory-content{
+    flex:1;
+    overflow-y:auto;
+    color:white;
+    font-size:18px;
+    line-height:1.4;
+}
+
+.game-stats-container {
+    color: white;
+    position: absolute;
+    top: 50px;
+    left: 25px;
+    right: 25px;
+}
+
+.stats-header {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 26px;
+    letter-spacing: 6px;
+    white-space: nowrap;
+    background: linear-gradient(180deg, #ff6b6b 0%, #c0392b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.item-header {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 26px;
+    letter-spacing: 6px;
+    white-space: nowrap;
+    font-family: 'Munro', monospace;
+    background: linear-gradient(180deg, #888 0%, #555 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.stats-content {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 20px;
+    line-height: 1.4;
+    padding: 0 30px;
+}
+
+.label { color: rgba(255,255,255,0.75); }
+.text-red    { color: #ff6b6b; }
+.text-yellow { color: #ffd93d; }
+.text-gray   { color: #888; }
+
+.item-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 0 10px;
+    /* 道具系统禁用，整体变暗并降低饱和度 */
+    filter: grayscale(100%) brightness(0.5);
+    pointer-events: none;
+}
+
+.item-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.item-img {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    image-rendering: pixelated;
+}
+
+.card-bg { width: 100%; display: block; }
+
+.item-name {
+    position: absolute;
+    bottom: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 20px;
+    font-family: 'Munro', monospace;
+    color: #9f651e;
+    white-space: nowrap;
+}
+
+.static-notice {
+    text-align: center;
+    color: #888;
+    font-size: 22px;
+    margin-top: 40px;
+    letter-spacing: 2px;
+}
+
+/*撞墙提示*/
+#wall-popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 999;
+    font-family: 'Munro', monospace;
+}
+
+#wall-popup.show {
+    animation: wallShake 0.4s ease;
+}
+
+.popup-frame {
+    position: relative;
+    background: #6b4321;
+    background-image:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0,0,0,0.12) 0px,
+            rgba(0,0,0,0.12) 3px,
+            transparent 3px,
+            transparent 9px
+        );
+    border: 4px solid #2a1606;
+    box-shadow:
+        inset 0 0 0 3px #8a5a2e,
+        6px 6px 0 0 rgba(0,0,0,0.5);
+    padding: 28px 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.popup-title {
+    color: #ff6b6b;
+    font-size: 20px;
+    letter-spacing: 3px;
+    margin: 0;
+    text-shadow: 2px 2px 0px #000;
+    text-align: center;
+}
+
+@keyframes wallShake {
+    0%, 100% { transform: translate(-50%, -50%); }
+    25% { transform: translate(calc(-50% - 5px), -50%); }
+    75% { transform: translate(calc(-50% + 5px), -50%); }
+}
+</style>
+</head>
+
+<body>
+<div id="wall-popup">
+    <div class="popup-frame">
+        <p class="popup-title">WALL AHEAD!</p>
+    </div>
+</div>
+
+<div class="game">
+    <div class="left">
+        <canvas id="c" width="960" height="960"></canvas>
+    </div>
+
+    <div class="right">
+        <div class="board-top">
+            <div class="stats-header">CHASE STATS</div>
+            <div class="game-stats-container">
+                <div class="stats-content">
+                    <div class="stats-row">
+                        <span class="label">Mode:</span>
+                        <span class="value text-red" id="stat-difficulty">Chase</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="label">Your steps (Monster):</span>
+                        <span class="value text-yellow" id="stat-monster-steps">0</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="label">Prey steps (Human):</span>
+                        <span class="value text-yellow" id="stat-human-steps">0</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="label">Items:</span>
+                        <span class="value text-gray">Disabled</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="board-bottom">
+            <div class="item-header">ITEM</div>
+            <div class="inventory-content">
+                <div class="item-grid">
+                    <div class="item-card">
+                        <img src="/ui/play/card.png" class="card-bg">
+                        <img src="/ui/play/boots.png" class="item-img">
+                        <div class="item-name">Boots</div>
+                    </div>
+                    <div class="item-card">
+                        <img src="/ui/play/card.png" class="card-bg">
+                        <img src="/ui/play/frozen.png" class="item-img">
+                        <div class="item-name">Frozen</div>
+                    </div>
+                    <div class="item-card">
+                        <img src="/ui/play/card.png" class="card-bg">
+                        <img src="/ui/play/door.png" class="item-img">
+                        <div class="item-name">Door</div>
+                    </div>
+                    <div class="item-card">
+                        <img src="/ui/play/card.png" class="card-bg">
+                        <img src="/ui/play/cloak.png" class="item-img">
+                        <div class="item-name">Cloak</div>
+                    </div>
+                </div>
+                
+                <div class="static-notice">
+                    [ ITEMS DISABLED IN CHASE MODE ]<br><br>
+                    Hunt down the human!
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+const SIZE = 30;
+const TILE = canvas.width / SIZE;
+
+// 角色位置状态
+let human = [0, 0];
+let monster = [0, 0];
+let map = [];
+
+// 动画状态
+let humanTarget = [0, 0];
+let humanLerpFrom = [0, 0];
+let humanQueue = [];
+let humanLerpStart = null;
+const HUMAN_LERP_MS = 300;
+
+let floorImg = null;
+const obstacles = {};
+let wallLayer = null;
+
+let animFrameId;
+
+// 待机动画
+let humanWaitImg = null;
+let monsterWaitImg = null;
+let breathOffset = 0;
+let monsterBreathOffset = 0;
+let walkDirection = 'down';           // 怪兽（玩家）行走方向
+let humanWalkDirection = 'down';      // 人类（AI）行走方向
+let lastMoveTime = 0;                 // 怪兽最近移动时间
+let humanMoveTime = 0;                // 人类最近移动时间
+let lastTime = 0;
+
+// HUD数据
+let humanSteps = 0;
+let monsterSteps = 0;
+
+// 行走动画图片组
+let humanWalkImgs = {};
+let monsterWalkImgs = {};
+const WALK_NAMES = { down: 'forward', up: 'back', left: 'left', right: 'right' };
+
+const WALK_SRC = {
+    down:  { w: 450, h: 465 },
+    up:    { w: 474, h: 491 },
+    left:  { w: 506, h: 502 },
+    right: { w: 486, h: 498 },
+};
+
+const MONSTER_WALK_SRC = {
+    up:    { w: 160, h: 227 },
+    down:  { w: 173, h: 228 },
+    left:  { w: 161, h: 192 },
+    right: { w: 143, h: 189 }
+};
+
+// ========== 加载素材 ==========
+function loadFloor() {
+    return new Promise(resolve => {
+        const ids = ['07', '09'];
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const octx = offscreen.getContext('2d');
+
+        const tileW = canvas.width * 0.55;
+        const tileH = canvas.height * 0.55;
+        const overlap = 1 / 3;
+        const step = tileW * (1 - overlap);
+        const cols = Math.ceil(canvas.width / step) + 1;
+        const rows = Math.ceil(canvas.height / (tileH * (1 - overlap))) + 1;
+
+        const total = cols * rows;
+        let loaded = 0;
+
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const id = ids[Math.floor(Math.random() * ids.length)];
+                const img = new Image();
+                img.src = `/ui/play/back_${id}.png`;
+
+                const cx = col * step + tileW / 2 - step * 0.2;
+                const cy = row * tileH * (1 - overlap) + tileH / 2 - tileH * 0.1;
+                const angle = Math.floor(Math.random() * 4) * Math.PI / 2;
+
+                img.onload = () => {
+                    octx.save();
+                    octx.translate(cx, cy);
+                    octx.rotate(angle);
+                    octx.drawImage(img, -tileW / 2, -tileH / 2, tileW, tileH);
+                    octx.restore();
+                    if (++loaded === total) { floorImg = offscreen; resolve(); }
+                };
+                img.onerror = () => {
+                    if (++loaded === total) { floorImg = offscreen; resolve(); }
+                };
+            }
+        }
+    });
+}
+
+function loadObstacles() {
+    return Promise.all(['02', '03', '04'].map(id =>
+        new Promise(resolve => {
+            const img = new Image();
+            img.src = `/ui/play/hinder_${id}.png`;
+            img.onload = () => { obstacles[id] = img; resolve(); };
+            img.onerror = () => resolve();
+        })
+    ));
+}
+
+function buildWallLayer() {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = canvas.width;
+    offscreen.height = canvas.height;
+    const octx = offscreen.getContext('2d');
+
+    for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j < SIZE; j++) {
+            if (map[i][j] === 1) {
+                const key = getObstacleKey(i, j);
+                const img = obstacles[key];
+                if (img) {
+                    const padding = TILE * 0.15;
+                    const x = j * TILE - padding;
+                    const y = i * TILE - padding;
+                    const w = TILE + padding * 2;
+                    const h = TILE + padding * 2;
+                    octx.save();
+                    octx.globalAlpha = 0.3;
+                    octx.fillStyle = '#000';
+                    octx.beginPath();
+                    octx.ellipse(x + w/2, y + h*0.9, w*0.4, h*0.1, 0, 0, Math.PI*2);
+                    octx.fill();
+                    octx.restore();
+                    octx.drawImage(img, x, y, w, h);
+                }
+            }
+        }
+    }
+    wallLayer = offscreen;
+}
+
+function loadHuman() {
+    return new Promise(resolve => {
+        humanWaitImg = new Image();
+        humanWaitImg.src = '/ui/play/human_wait.png';
+        humanWaitImg.onload = resolve;
+        humanWaitImg.onerror = resolve;
+    });
+}
+
+function loadHumanWalk() {
+    return Promise.all(['down','up','left','right'].map(dir =>
+        new Promise(resolve => {
+            const img = new Image();
+            img.src = `/ui/play/human_walk_${WALK_NAMES[dir]}.png`;
+            img.onload = () => { humanWalkImgs[dir] = img; resolve(); };
+            img.onerror = resolve;
+        })
+    ));
+}
+
+function loadMonster() {
+    return new Promise(resolve => {
+        monsterWaitImg = new Image();
+        monsterWaitImg.src = '/ui/play/monster_wait.png';
+        monsterWaitImg.onload = resolve;
+        monsterWaitImg.onerror = resolve;
+    });
+}
+
+function loadMonsterWalk() {
+    return Promise.all(['down','up','left','right'].map(dir =>
+        new Promise(resolve => {
+            const img = new Image();
+            img.src = `/ui/play/monster_walk_${WALK_NAMES[dir]}.png`;
+            img.onload = () => { monsterWalkImgs[dir] = img; resolve(); };
+            img.onerror = resolve;
+        })
+    ));
+}
+
+// ========== HUD更新 ==========
+function updateHUD() {
+    document.getElementById('stat-human-steps').textContent = humanSteps;
+    document.getElementById('stat-monster-steps').textContent = monsterSteps;
+}
+
+// ========== 工具函数 ==========
+function isWall(r, c) {
+    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return false;
+    return map[r][c] === 1;
+}
+
+function wallNeighborCount(r, c) {
+    let count = 0;
+    if (isWall(r - 1, c)) count++;
+    if (isWall(r + 1, c)) count++;
+    if (isWall(r, c - 1)) count++;
+    if (isWall(r, c + 1)) count++;
+    return count;
+}
+
+function getObstacleKey(r, c) {
+    const n = wallNeighborCount(r, c);
+    if (n >= 2) return '03';
+    if (n === 1) return '02';
+    return '04';
+}
+
+// ========== 人类(AI)平滑移动逻辑 ==========
+function advanceHumanLeg() {
+    if (humanQueue.length === 0) {
+        humanLerpStart = null;
+    } else {
+        const next = humanQueue.shift();
+        const dr = next[0] - human[0];
+        const dc = next[1] - human[1];
+        if (dr !== 0) {
+            humanWalkDirection = dr > 0 ? 'down' : 'up';
+        } else if (dc !== 0) {
+            humanWalkDirection = dc > 0 ? 'right' : 'left';
+        }
+        humanLerpFrom = [...human];   // 新增：记录起点
+        humanTarget = next;
+        humanMoveTime = performance.now();
+        humanLerpStart = performance.now();
+    }
+}
+
+// ========== 动画更新 ==========
+function updateAnim() {
+    breathOffset = Math.sin(performance.now() * 0.003) * 1;
+    monsterBreathOffset = Math.sin(performance.now() * 0.003 + 1.5) * 1;
+
+    if (humanLerpStart !== null) {
+        const t = Math.min((performance.now() - humanLerpStart) / HUMAN_LERP_MS, 1);
+        human[0] = humanLerpFrom[0] + (humanTarget[0] - humanLerpFrom[0]) * t;
+        human[1] = humanLerpFrom[1] + (humanTarget[1] - humanLerpFrom[1]) * t;
+        if (t >= 1) {
+            human[0] = humanTarget[0];
+            human[1] = humanTarget[1];
+            advanceHumanLeg();
+        }
+    }
+}
+
+// ========== 绘制角色 ==========
+function drawHuman() {
+    const scale = 2.7;
+    const dw = TILE * scale;
+    const dh = TILE * scale;
+    const x = human[1] * TILE - (dw - TILE) / 2;
+    const y = human[0] * TILE - (dh - TILE) * 0.8;
+
+    // 根据人类自己的移动时间判断是否在走
+    const isWalking = (performance.now() - humanMoveTime) < HUMAN_LERP_MS;
+
+    if (isWalking && humanWalkImgs[humanWalkDirection]) {
+        const img = humanWalkImgs[humanWalkDirection];
+        const src = WALK_SRC[humanWalkDirection];
+        const wdw = dw * 0.85;
+        const wdh = dh * 0.85;
+        const wdx = x + (dw - wdw) / 2;
+        const wdy = y + (dh - wdh);
+        ctx.drawImage(img, 0, 0, src.w, src.h, wdx, wdy, wdw, wdh);
+    } else {
+        if (humanWaitImg) ctx.drawImage(humanWaitImg, x, y + breathOffset, dw, dh);
+    }
+}
+
+function drawMonster() {
+    const scale = 2.9;
+    const baseH = TILE * scale;
+    
+    // 怪兽(玩家)是瞬间更新位置坐标的
+    const x = monster[1] * TILE;
+    const y = monster[0] * TILE;
+
+    const isWalking = (performance.now() - lastMoveTime) < 300;
+    const img = isWalking ? monsterWalkImgs[walkDirection] : monsterWaitImg;
+    if (!img) return;
+
+    let srcW, srcH;
+    if (isWalking && MONSTER_WALK_SRC[walkDirection]) {
+        srcW = MONSTER_WALK_SRC[walkDirection].w;
+        srcH = MONSTER_WALK_SRC[walkDirection].h;
+    } else {
+        srcW = img.naturalWidth;
+        srcH = img.naturalHeight;
+    }
+
+    const targetH = baseH * (isWalking ? 0.85 : 1);
+    const aspect = srcW / srcH;
+    const renderH = targetH;
+    const renderW = targetH * aspect;
+
+    const dx = x + TILE / 2 - renderW / 2;
+    const dy = y - (renderH - TILE) * 0.8 + (isWalking ? 0 : monsterBreathOffset);
+
+    ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, renderW, renderH);
+}
+
+// ========== 游戏循环 ==========
+function gameLoop(timestamp) {
+    lastTime = timestamp;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (floorImg) ctx.drawImage(floorImg, 0, 0);
+    if (wallLayer) ctx.drawImage(wallLayer, 0, 0);
+
+    updateAnim();
+    drawHuman();
+    drawMonster();
+
+    animFrameId = requestAnimationFrame(gameLoop);
+}
+
+// ========== 键盘控制 (追逐模式) ==========
+const DIR_MAP = {
+    ArrowUp:    [-1,  0, 'walkUp'],
+    ArrowDown:  [ 1,  0, 'walkDown'],
+    ArrowLeft:  [ 0, -1, 'walkLeft'],
+    ArrowRight: [ 0,  1, 'walkRight'],
+};
+const WALK_DIR = { walkUp: 'up', walkDown: 'down', walkLeft: 'left', walkRight: 'right' };
+
+let inputLocked = false;
+
+document.addEventListener('keydown', async e => {
+    const d = DIR_MAP[e.key];
+    if (!d || !gameId || inputLocked) return;
+
+    inputLocked = true;
+
+    try {
+        const dirKey = WALK_DIR[d[2]];
+
+        const res = await fetch(`/api/games/${gameId}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction: dirKey })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            showWallPopup();
+            return;
+        }
+
+        // 玩家(怪兽)移动成功
+        walkDirection = dirKey;
+        lastMoveTime = performance.now();
+        monsterSteps += 1;
+
+        // 怪兽位置瞬间更新
+        monster = [data.monsters[0].row, data.monsters[0].col];
+
+        // 检查 AI(人类) 是否移动
+        const newHumanPos = [data.human.row, data.human.col];
+        // 如果当前人类的终点位置和最新坐标不同，说明被后端推走了
+        const humanTargetPos = humanQueue.length > 0 ? humanQueue[humanQueue.length - 1] : humanTarget;
+        const humanMoved = humanTargetPos[0] !== newHumanPos[0] || humanTargetPos[1] !== newHumanPos[1];
+
+        if (humanMoved) {
+            humanQueue.push(newHumanPos);
+            humanSteps += 1;
+            if (humanLerpStart === null) advanceHumanLeg();
+        }
+
+        updateHUD();
+
+        // 在追逐模式中，怪兽抓到人，游戏结束！
+        if (data.status === 'ended') gameOver();
+
+    } finally {
+        inputLocked = false;
+    }
+});
+
+function gameOver() {
+    cancelAnimationFrame(animFrameId);
+    const params = new URLSearchParams({
+        mode: 'monster',
+        steps: monsterSteps,
+        items: 0,
+        level: 'chase'
+    });
+    window.location.href = `/ui/gameover/gameover.html?${params}`;
+}
+
+let wallPopupTimer = null;
+function showWallPopup() {
+    const el = document.getElementById('wall-popup');
+    el.style.display = 'block';
+    el.classList.remove('show');
+    requestAnimationFrame(() => el.classList.add('show'));
+    clearTimeout(wallPopupTimer);
+    wallPopupTimer = setTimeout(hideWallPopup, 1200);
+}
+function hideWallPopup() {
+    document.getElementById('wall-popup').style.display = 'none';
+    document.getElementById('wall-popup').classList.remove('show');
+    clearTimeout(wallPopupTimer);
+}
+
+// ========== 初始化 ==========
+let gameId = null;
+
+async function init() {
+    await Promise.all([
+        loadFloor(),
+        loadObstacles(),
+        loadHuman(),
+        loadHumanWalk(),
+        loadMonster(),
+        loadMonsterWalk()
+        // 移除了道具图片加载
+    ]);
+
+    const res = await fetch("/api/games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // 指定模式为 chase
+        body: JSON.stringify({
+            mode: "chase"
+        })
+    });
+
+    const game = await res.json();
+    gameId = game.game_id;
+
+    map = game.grid;
+    buildWallLayer(); 
+    
+    // 初始化角色位置
+    human = [game.human.row, game.human.col];
+    humanTarget = [...human];
+    monster = [game.monsters[0].row, game.monsters[0].col];
+    
+    updateHUD();
+
+    requestAnimationFrame(gameLoop);
+}
+
+init();
+</script>
+
+    <script src="/ui/global-controls.js"></script>
+
+</body>
+</html>

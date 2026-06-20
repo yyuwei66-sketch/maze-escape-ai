@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Over - Maze Escape</title>
+    <style>
+        /* ================= 字体与全屏背景 ================= */
+        @font-face {
+            font-family: 'Munro';
+            src: url('munro.ttf') format('truetype');
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-image: url('森林开始界面背景图.png');
+            background-size: cover;
+            background-position: center;
+            font-family: 'Munro', monospace; 
+            background-color: rgba(0, 0, 0, 0.55); 
+            background-blend-mode: overlay;
+        }
+
+        .go-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 2vh;
+        }
+
+        /* ================= 顶部 GAME OVER 木板标题 ================= */
+        .title-board {
+            position: relative;
+            width: 40vw;
+            max-width: 450px;
+            height: 18vh;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.8));
+            flex-shrink: 0;
+        }
+
+        .title-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            z-index: 1;
+        }
+
+        .title-text {
+            position: relative;
+            z-index: 2;
+            color:  #F4D03F; 
+            font-size: clamp(30px, 4.5vw, 55px);
+            text-shadow: 4px 4px 0px #000;
+            letter-spacing: 5px;
+            white-space: nowrap;
+        }
+
+        /* ================= 结算主卷轴 (横向) ================= */
+        .scroll-container {
+            position: relative;
+            width: 100vw;
+            max-width: 950px;
+            height: 75vh;
+            /* 👇 核心修改 1：加了负边距，让整个卷轴向上移动，盖住透明缝隙 */
+            margin-top: -6vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            filter: drop-shadow(0px 15px 25px rgba(0,0,0,0.7));
+            flex-shrink: 0;
+        }
+
+        .scroll-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
+            z-index: 1;
+        }
+
+        /* ================= 核心对峙：卡牌明暗逻辑 ================= */
+        .showdown-box {
+            /* 👇 核心修改 2：改为绝对定位。脱离挤压，完美包裹 */
+            position: absolute;
+            top: 27%; /* 自由调节卡牌在卷轴内的上下位置 */
+            left: 50%;
+            transform: translateX(-50%); /* 确保水平居中 */
+            z-index: 2;
+            width: 85%;
+            height: 48%; /* 稍微收敛高度 */
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        /* 👉 新增：卡牌与印章的保护容器 */
+        .card-wrapper {
+            position: relative;
+            width: 25%;
+            height: 90%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .char-card {
+            position: relative;
+            width: 100%;  /* 改为填满容器 */
+            height: 100%; /* 改为填满容器 */
+            background-size: 100% 100%;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: filter 0.3s ease, transform 0.3s ease;
+        }
+        
+        .card-bright {
+            background-image: url('高亮卡牌.png');
+            filter: drop-shadow(0px 0px 20px rgba(255, 140, 0, 0.8));
+            transform: scale(1.05);
+        }
+
+        .card-dim {
+            background-image: url('卡牌.png');
+            filter: grayscale(100%) brightness(0.25);
+        }
+
+        .char-img {
+            height: 80%;
+            width: auto;
+            object-fit: contain;
+        }
+
+        /* ================= 印章特技动画 ================= */
+        .stamp {
+            position: absolute;
+            z-index: 10;
+            width: 65%; /* 印章相对卡牌的大小 */
+            max-width: 180px;
+            height: auto;
+            opacity: 0; /* 初始不可见 */
+            filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.6));
+            pointer-events: none; /* 防止挡住底下的元素交互 */
+        }
+
+        /* 胜利印章：左上角 */
+        .stamp-victory {
+            top: -15%;
+            left: -25%;
+            --end-rot: -12deg; /* 最终歪斜角度 */
+            /* 延迟 0.3 秒砸下 */
+            animation: stampSmash 0.4s ease-out 0.3s forwards; 
+        }
+
+        /* 失败印章：左下角 */
+        /* ================= 失败印章：移动到左上角运行运行运行运行运行 ================= */
+        .stamp-defeat {
+            top: -15%;         
+            left: -25%;        
+            --end-rot: -15deg;   
+            /* 延迟 0.7 秒砸下，营造先后顺序的节奏感运行 */
+            animation: stampSmash 0.4s ease-out 0.7s forwards; 
+        }
+        
+        /* 核心动画：从巨大、透明，瞬间缩小砸到纸上，并带有一点反弹 */
+        @keyframes stampSmash {
+            0% {
+                opacity: 0;
+                transform: scale(4) rotate(calc(var(--end-rot) + 30deg));
+            }
+            50% {
+                opacity: 1;
+                /* 砸到极点时甚至比原本小一点点，营造重击感 */
+                transform: scale(0.8) rotate(calc(var(--end-rot) - 5deg));
+            }
+            75% {
+                transform: scale(1.1) rotate(calc(var(--end-rot) + 2deg));
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(var(--end-rot));
+            }
+        }
+
+        /* ================= 硬核纯文字数据栏 (无图标) ================= */
+        .stats-box {
+            /* 👇 核心修改 3：底部数据栏也改为绝对定位 */
+            position: absolute;
+            bottom: 12%; /* 自由调节数据栏距卷轴底部的距离 */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            width: 75%;
+            height: 15%;
+            border-top: 2px dashed rgba(46, 26, 15, 0.4); 
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around; 
+            align-items: center;
+        }
+
+        .stats-item {
+            color: #8B0000; 
+            font-size: clamp(22px, 3vw, 38px);
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.4);
+            white-space: nowrap;
+        }
+
+        .stats-value {
+            color: #8B0000; 
+            margin-left: 15px;
+        }
+
+        /* ================= 底部双木板按钮样式 ================= */
+        .btn-group {
+            display: flex;
+            flex-direction: row;
+            gap: 4vw; 
+            width: 60vw;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 1vh;
+        }
+
+        .go-btn {
+            position: relative;
+            width: 30%; 
+            max-width: 220px;
+            height: clamp(70px, 8.5vh, 120px); 
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            outline: none;
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+
+        .go-btn:hover {
+            transform: scale(1.05);
+            filter: brightness(1.15);
+        }
+
+       .btn-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            color: #F4D03F;
+            font-family: 'Munro', monospace; 
+            font-size: clamp(16px, 2.5vw, 28px);
+            white-space: nowrap;
+            text-shadow: 3px 3px 0px #000;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="go-container">
+        
+        <div class="title-board">
+            <img src="木板.png" class="title-bg" alt="board">
+            <span class="title-text">GAME OVER</span>
+        </div>
+
+        <div class="scroll-container">
+            <img src="结算卷轴.png" class="scroll-bg" alt="scroll">
+
+            <div class="showdown-box">
+                <div class="card-wrapper">
+                    <div class="char-card card-bright">
+                        <img src="怪物.png" class="char-img" alt="monster">
+                    </div>
+                    <img src="胜利印章.png" class="stamp stamp-victory" alt="Victory">
+                </div>
+
+                <div class="card-wrapper">
+                    <div class="char-card card-dim">
+                        <img src="人物.png" class="char-img" alt="human">
+                    </div>
+                    <img src="失败印章.png" class="stamp stamp-defeat" alt="Defeat">
+                </div>
+            </div>
+
+            <div class="stats-box">
+                <div class="stats-item">STEPS:<span class="stats-value">124</span></div>
+                <div class="stats-item">ITEMS USED:<span class="stats-value">3</span></div>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="go-btn" onclick="window.location.href='character.html'">
+                <img src="木板.png" class="title-bg" alt="board">
+                <span class="btn-text">PLAY AGAIN</span>
+            </button>
+
+            <button class="go-btn" onclick="window.location.href='index.html'">
+                <img src="木板.png" class="title-bg" alt="board">
+                <span class="btn-text">MAIN MENU</span>
+            </button>
+        </div>
+
+    </div>
+
+</body>
+</html>
