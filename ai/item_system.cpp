@@ -358,7 +358,7 @@ bool applyItemEffect(
     vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const vector<vector<int>>& grid,
-    const vector<MonsterState>& monsters
+    vector<MonsterState>& monsters
 ) {
     if (item.type == SPEED_BOOTS) {
         player.extraSteps += SPEED_BOOTS_EXTRA_STEPS;
@@ -379,14 +379,11 @@ bool applyItemEffect(
         return true;
     }
     else if (item.type == FREEZE_TRAP) {
-        Item trap;
-        trap.type = FREEZE_TRAP;
-        trap.pos = item.pos;
-        trap.lifetime = FREEZE_TRAP_LIFETIME;
-        trap.active = true;
-        traps.push_back(trap);
-        cout << "[Effect] Freeze Trap triggered: Enhanced trap deployed for "
-             << FREEZE_TRAP_LIFETIME << " player steps." << endl;
+        for (MonsterState& monster : monsters) {
+            monster.frozenTurns = FREEZE_TRAP_DURATION;
+        }
+        cout << "[Effect] Freeze Trap triggered: Monsters frozen for "
+             << FREEZE_TRAP_DURATION << " player steps." << endl;
         item.active = false;
         return false;
     }
@@ -407,7 +404,7 @@ bool checkPlayerItemPickup(
     vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const vector<vector<int>>& grid,
-    const vector<MonsterState>& monsters
+    vector<MonsterState>& monsters
 ) {
     for (Item& item : items) {
         if (item.active && samePosition(player.pos, item.pos)) {

@@ -933,9 +933,13 @@ document.addEventListener('keydown', async e => {
 
         if (!res.ok) {
             console.warn('移动被服务器拒绝:', res.status, data);
+            invalidObjectLabel = data && data.error ? data.error : 'blocked';
+            updateItemPanel();
             showWallPopup();
             return; // 不更新人物/怪物状态，也不触发走路动画
         }
+
+        invalidObjectLabel = 'none';
 
         // 确认移动成功后才触发走路动画
         walkDirection = dirKey;

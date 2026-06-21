@@ -21,6 +21,7 @@ from .greedy import (
     make_greedy_controller,
     pick_monster_spawns as pick_greedy_monster_spawns,
 )
+from .genetic_map import generate_map_ga, get_approx_torus_spawn_points
 from .minimax import (
     MinimaxMonsterAI,
     make_minimax_controller,
@@ -149,6 +150,7 @@ def run_cpp_map_algorithm(
     human: Pos,
     monster: Pos,
     sa_previous_move: tuple[Pos, Pos] | None = None,
+    bfs_previous_human: Pos | None = None,
 ) -> tuple[Pos, Pos]:
     """Run a C++ map-mutating algorithm and return ``(human, monster)``.
 
@@ -172,6 +174,7 @@ def run_cpp_map_algorithm(
             human,
             monster,
             sa_previous_move=sa_previous_move if algorithm == "sa" else None,
+            bfs_previous_human=bfs_previous_human if algorithm == "bfs" else None,
         )
 
         result = subprocess.run(
@@ -277,6 +280,7 @@ def _write_cpp_map(
     human: Pos,
     monster: Pos,
     sa_previous_move: tuple[Pos, Pos] | None = None,
+    bfs_previous_human: Pos | None = None,
 ) -> None:
     with path.open("w", encoding="utf-8") as f:
         for row in grid:
@@ -290,6 +294,8 @@ def _write_cpp_map(
                 f"{move_from[0]} {move_from[1]} "
                 f"{move_to[0]} {move_to[1]}\n"
             )
+        if bfs_previous_human is not None:
+            f.write(f"2 {bfs_previous_human[0]} {bfs_previous_human[1]}\n")
 
 
 def _read_cpp_map(path: Path) -> tuple[list[list[int]], list[Pos]]:
@@ -348,6 +354,8 @@ __all__ = [
     "WIDTH",
     "astar",
     "ensure_cpp_executable",
+    "generate_map_ga",
+    "get_approx_torus_spawn_points",
     "get_next_step_single",
     "get_next_steps_two",
     "make_greedy_controller",

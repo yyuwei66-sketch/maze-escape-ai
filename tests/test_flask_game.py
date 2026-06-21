@@ -106,6 +106,30 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(data["pending_monster_steps"], 0)
         self.assertEqual(data["step_count"], 1)
 
+    def test_chase_bfs_reuses_previous_human_position(self):
+        response = self.make_game({"mode": "chase"})
+        game_id = response.get_json()["game_id"]
+
+        with patch(
+            "main.run_cpp_map_algorithm",
+            side_effect=[((0, 29), (0, 3)), ((0, 28), (0, 1))],
+        ) as run_algorithm:
+            for _ in range(4):
+                move = self.client.post(
+                    f"/api/games/{game_id}/move",
+                    json={"direction": "left"},
+                )
+
+        self.assertEqual(move.status_code, 200)
+        self.assertIsNone(
+            run_algorithm.call_args_list[0].kwargs["bfs_previous_human"]
+        )
+        self.assertEqual(
+            run_algorithm.call_args_list[1].kwargs["bfs_previous_human"],
+            (0, 0),
+        )
+        self.assertEqual(main.games[game_id].bfs_previous_human, (0, 29))
+
     def test_astar_two_monster_creation(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar", "monster_count": 2}
@@ -196,6 +220,28 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(move.status_code, 200)
         run_algorithm.assert_not_called()
         self.assertEqual(game.sa_previous_move, ((0, 7), (0, 5)))
+
+    def test_sa_cpp_failure_falls_back_without_desyncing_human_move(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "sa", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+
+        with patch(
+            "main.run_cpp_map_algorithm",
+            side_effect=main.CppAlgorithmError("SA failed"),
+        ):
+            move = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertEqual(data["human"], {"row": 1, "col": 0})
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertEqual(main.games[game_id].human, (1, 0))
 
     def test_ended_game_rejects_more_moves(self):
         response = self.make_game(
@@ -304,6 +350,27 @@ class FlaskGameTest(unittest.TestCase):
             data["monster_states"][0]["frozen_turns"],
             main.FREEZE_TRAP_DURATION,
         )
+        self.assertEqual(data["traps"], [])
+
+    def test_freeze_item_freezes_monster_immediately_when_picked_up(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.items = [main.ItemState(type="freeze_trap", pos=(1, 0))]
+
+        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 5}])
+        self.assertEqual(
+            data["monster_states"][0]["frozen_turns"],
+            main.FREEZE_TRAP_DURATION,
+        )
+        self.assertEqual(data["items"], [])
         self.assertEqual(data["traps"], [])
 
     def test_invisibility_cloak_prevents_monster_move_for_turn(self):

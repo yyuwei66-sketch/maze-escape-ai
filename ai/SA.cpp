@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <queue>
 using namespace std;
 
 const int MAP_SIZE = 30;
@@ -223,18 +224,75 @@ bool dfsInitialPath(const Point& now,const Point& target,bool visited[MAP_SIZE][
 
 vector<Point> extendPath(vector<Point> path,const Point& target)
 {
-    bool visited[MAP_SIZE][MAP_SIZE]={false};
-    vector<Point> originalPath=path;
-    int searchLeft=DFS_EXTEND_SEARCH_LIMIT;
+    if(path.empty())return path;
 
-    for(const Point& p:path)
+    Point start=path.back();
+    bool blocked[MAP_SIZE][MAP_SIZE]={false};
+    for(int i=0;i+1<(int)path.size();i++)
     {
-        visited[p.x][p.y]=true;
+        blocked[path[i].x][path[i].y]=true;
     }
 
-    if(dfsInitialPath(path.back(),target,visited,path,searchLeft))return path;
+    int parentX[MAP_SIZE][MAP_SIZE];
+    int parentY[MAP_SIZE][MAP_SIZE];
+    bool visited[MAP_SIZE][MAP_SIZE]={false};
 
-    return originalPath;
+    auto runBfs=[&](bool useBlocked)
+    {
+        for(int i=0;i<MAP_SIZE;i++)
+        {
+            for(int j=0;j<MAP_SIZE;j++)
+            {
+                parentX[i][j]=-1;
+                parentY[i][j]=-1;
+                visited[i][j]=false;
+            }
+        }
+
+        queue<Point> q;
+        q.push(start);
+        visited[start.x][start.y]=true;
+
+        while(!q.empty())
+        {
+            Point now=q.front();
+            q.pop();
+            if(samePoint(now,target))return true;
+
+            vector<Point> candidates=nextPoints(now);
+            sort(candidates.begin(),candidates.end(),[&](const Point& a,const Point& b)
+            {
+                return torusDistance(a,target)<torusDistance(b,target);
+            });
+
+            for(const Point& nxt:candidates)
+            {
+                if(!available(nxt)||visited[nxt.x][nxt.y])continue;
+                if(useBlocked&&blocked[nxt.x][nxt.y])continue;
+                visited[nxt.x][nxt.y]=true;
+                parentX[nxt.x][nxt.y]=now.x;
+                parentY[nxt.x][nxt.y]=now.y;
+                q.push(nxt);
+            }
+        }
+        return visited[target.x][target.y];
+    };
+
+    if(!runBfs(true)&&!runBfs(false))
+    {
+        return path;
+    }
+
+    vector<Point> suffix;
+    Point cur=target;
+    while(!samePoint(cur,start))
+    {
+        suffix.push_back(cur);
+        cur={parentX[cur.x][cur.y],parentY[cur.x][cur.y]};
+    }
+    reverse(suffix.begin(),suffix.end());
+    path.insert(path.end(),suffix.begin(),suffix.end());
+    return path;
 }
 
 vector<Point> makeInitialPath()
@@ -242,15 +300,9 @@ vector<Point> makeInitialPath()
     vector<Point> path;
     Point start={xm,ym};
     Point target={xh,yh};
-    bool visited[MAP_SIZE][MAP_SIZE]={false};
 
     path.push_back(start);
-    visited[start.x][start.y]=true;
-    int searchLeft=DFS_INITIAL_SEARCH_LIMIT;
-
-    if(dfsInitialPath(start,target,visited,path,searchLeft))return path;
-
-    return path;
+    return extendPath(path,target);
 }
 
 double scorePath(const vector<Point>& path)
