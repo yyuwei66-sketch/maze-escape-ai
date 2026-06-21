@@ -1,1 +1,56 @@
 \subsubsection{Minimax}
+
+Minimax models the chasing process between the monsters and the player as a 
+zero-sum game. The monsters are treated as the minimizing agent, whose goal is to 
+reduce the distance to the player. The player is treated as the maximizing agent, 
+whose goal is to increase the distance from the monsters.
+
+The system builds a depth-limited game tree to represent the possible actions of 
+both sides. Following the round-based structure of the game, the monsters first 
+move two steps, and then the player takes one step. This process is repeated for 
+a fixed number of rounds. In our implementation, the default search depth is set 
+to two in order to keep the computation within the available budget.
+
+Leaf nodes are evaluated using an evaluation function based on the distances 
+between the player and all monsters:
+
+\[
+\text{Eval} = 4 \cdot \min_i d(\text{Human}, \text{Monster}_i)
++ \sum_i d(\text{Human}, \text{Monster}_i)
+\]
+
+In this function, the first term is given a weight of 4 because the nearest 
+monster represents the greatest immediate risk to the player. The summation term 
+encourages all monsters to continue approaching the player, rather than allowing 
+only the closest monster to move effectively. A smaller evaluation score favors 
+the monsters, while a larger score favors the player. If a monster reaches the 
+player's cell, the node returns a large negative score. If the player is caught 
+in fewer steps, the score is made even lower, encouraging the monsters to capture 
+the player as quickly as possible.
+
+Searching the entire game tree is computationally expensive, so several standard 
+optimizations are applied. First, alpha-beta pruning is used to eliminate branches 
+that cannot affect the final decision, thereby reducing the number of nodes that 
+must be searched. Second, a transposition table is used to cache evaluated states. 
+Each state is represented by the player position, the tuple of monster positions, 
+and the current ply index, together with a bound flag. Since the game is played 
+on a wrap-around grid, many states can be reached through different action 
+sequences, so caching helps avoid repeated computation.
+
+Third, move ordering is applied to improve pruning efficiency. Monster moves are 
+ordered by increasing distance to the player, while player moves are ordered by 
+decreasing distance from the monsters. In addition, the best move recorded in the 
+transposition table is checked first when available. A good move ordering allows 
+alpha-beta pruning to cut branches more aggressively and improves the overall 
+search efficiency. After the search is completed, the selected move sequence for 
+the current turn is reconstructed from the transposition table entries and 
+returned through the same movement interface.
+
+Compared with Greedy Search, Minimax provides predictive behavior. Instead of 
+only following the player's current position, the monsters simulate the player's 
+best possible responses and choose moves that can block escape routes. This makes 
+the monsters more strategic and more difficult to avoid. However, the computational 
+cost of Minimax is much higher, and it increases rapidly with the branching factor 
+and search depth. Therefore, the optimizations described above are essential for 
+making the algorithm practical. In this project, Minimax is used for higher 
+difficulty levels where stronger monster intelligence is required.

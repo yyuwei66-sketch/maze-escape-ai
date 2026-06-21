@@ -26,8 +26,7 @@ ai/genetic_map
 ai/*.dSYM/
 ai/finetune.md
 paper/report.md
-temp/
-
+*.pkl
 # LaTeX temporary files
 .texmf-var/
 *.aux
