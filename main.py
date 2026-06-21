@@ -6,7 +6,7 @@ import random
 from typing import Any, Dict, List, Sequence, Tuple
 import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 from ai import (
     CppAlgorithmError,
@@ -97,6 +97,7 @@ class GameState:
     human_extra_steps: int = 0
     human_invisible_turns: int = 0
     monster_frozen_turns: List[int] = field(default_factory=list)
+    last_monster_paths: List[List[Pos]] = field(default_factory=list)
     sa_previous_move: Tuple[Pos, Pos] | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -105,7 +106,20 @@ class GameState:
             "game_id": self.game_id,
             "grid": self.grid,
             "human": pos_to_json(self.human),
-            "monsters": [pos_to_json(pos) for pos in self.monsters],
+            "monsters": [
+                {
+                    **pos_to_json(pos),
+                    "path": [
+                        pos_to_json(path_pos)
+                        for path_pos in (
+                            self.last_monster_paths[index][1:]
+                            if index < len(self.last_monster_paths)
+                            else []
+                        )
+                    ],
+                }
+                for index, pos in enumerate(self.monsters)
+            ],
             "monster_states": [
                 {"pos": pos_to_json(pos), "frozen_turns": frozen}
                 for pos, frozen in zip(self.monsters, self.monster_frozen_turns)
@@ -569,17 +583,20 @@ def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
         game.monster_frozen_turns.append(0)
 
     if game.human_invisible_turns > 0:
+        game.last_monster_paths = [[pos] for pos in game.monsters]
         return list(game.monsters)
 
     if all(
         frozen > 0
         for frozen in game.monster_frozen_turns[:len(game.monsters)]
     ):
+        game.last_monster_paths = [[pos] for pos in game.monsters]
         return list(game.monsters)
 
     previous_monsters = list(game.monsters)
     paths = planned_monster_paths(game)
     next_monsters = list(game.monsters)
+    actual_paths: List[List[Pos]] = [[pos] for pos in game.monsters]
     for index, path in enumerate(paths):
         if index >= len(next_monsters):
             break
@@ -589,10 +606,12 @@ def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
         for pos in path[1:]:
             next_monsters[index] = pos
             game.monsters[index] = pos
+            actual_paths[index].append(pos)
             if check_monster_trap(game, index):
                 break
             if pos == game.human:
                 break
+    game.last_monster_paths = actual_paths
     if next_monsters:
         remember_sa_move(game, previous_monsters[0], next_monsters[0])
     return next_monsters
@@ -793,7 +812,12 @@ def move_human_with_bfs(game: GameState) -> Pos:
 
 @app.get("/")
 def index():
-    return INDEX_HTML
+    return send_from_directory("ui/index", "index.html")
+
+
+@app.route("/ui/<path:filename>")
+def ui_static(filename):
+    return send_from_directory("ui", filename)
 
 
 @app.post("/api/games")

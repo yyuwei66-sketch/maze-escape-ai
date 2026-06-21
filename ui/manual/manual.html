@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPG Game UI</title>
+
+<style>
+@font-face {
+    font-family: 'Munro';
+    src: url('/ui/fonts/munro.ttf') format('truetype');
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Munro", monospace;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0b130e;
+}
+
+.game-container {
+    width: 100%;
+    height: 100%;
+    background-image: url("/ui/manual/manual_background.png");
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+/* TOP 75% */
+.game-row-top {
+    flex: 0 0 60%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* BOTTOM 25% */
+.game-row-bottom {
+    flex: 0 0 35%;
+    display: flex;
+    align-items: center; 
+    justify-content: center;
+}
+
+/* 上方两块大板 */
+.bottom-bar-container {
+    display: flex;
+    gap: 15px;
+    padding-bottom: 0;
+}
+
+.big-board {
+    background-image: url("/ui/manual/wood.png");
+    background-size: 100% 100%;
+    height: 200px;
+    width: 700px;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    padding: 20px 30px;
+    margin: 10px 0;
+}
+
+.board-image {
+    width: 130px;
+    height: 130px;
+    object-fit: contain;
+    margin-left: 40px;
+}
+
+.board-text {
+    flex: 1;
+    text-align: left;
+    color: #e8d8b0;
+}
+
+.player-board .board-content { margin-left: -30px; }
+.monster-board .board-content { margin-left: -20px; }
+
+.board-title {
+    font-size: 25px;
+    color: #ffd36a;
+    margin-bottom: 5px;
+}
+
+.board-content {
+    font-size: 18px;
+    line-height: 1.4;
+}
+
+/* 底部栏 */
+.bottom-bar-container {
+    display: flex;
+    gap: 18px;
+    padding-bottom: 10px;
+}
+
+/* 通用竖卡 */
+.small-board-vertical {
+    background-image: url("/ui/manual/wood.png");
+    background-size: 100% 100%;
+    width: 180px;
+    height: 290px;
+    padding: 18px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.small-board-vertical:hover {
+    transform: translateY(-6px);
+}
+
+/* 道具卡图标 */
+.equip-icon-box {
+    width: 65px;
+    height: 65px;
+    margin: 45px auto 15px auto;
+}
+
+.equip-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.equip-name {
+    font-size: 20px;
+    color: #ffe66d;
+    margin-bottom: 5px;
+}
+
+.equip-desc {
+    font-size: 15px;
+    color: #e6d6c8;
+    line-height: 1.4;
+}
+
+/* ══════════════════════
+   控制说明竖卡
+══════════════════════ */
+.controls-card {
+    background-image: url("/ui/manual/wood.png");
+    background-size: 100% 100%;
+    width: 180px;
+    height: 290px;
+    padding: 14px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.ctrl-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+}
+
+.ctrl-section-label {
+    font-size: 13px;
+    color: #c8b48a;
+    letter-spacing: 0.05em;
+}
+
+.ctrl-section-desc {
+    font-size: 15px;
+    color: #ffe66d;
+    line-height: 1.3;
+    text-align: center;
+}
+
+/* 分割线 */
+.ctrl-sep {
+    width: 80%;
+    height: 1px;
+    background: #7a5c2e;
+    opacity: 0.5;
+}
+
+/* 方向键簇 */
+.key-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.key-row {
+    display: flex;
+    gap: 2px;
+}
+
+.key {
+    width: 24px;
+    height: 24px;
+    background: #2a1f10;
+    border: 2px solid #8b6a3a;
+    border-bottom: 4px solid #5a3e1e;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #ffd36a;
+    flex-shrink: 0;
+}
+
+.key.wide {
+    width: 40px;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+}
+</style>
+</head>
+
+<script>
+function closeManual() {
+    if (window.closeManualOverlay) {
+        window.closeManualOverlay();
+    } else {
+        window.location.href = "/";
+    }
+}
+
+
+</script>
+
+<body>
+
+<span onclick="closeManual()" style="
+    position: fixed;
+    top: 20px;
+    right: 30px;
+    font-size: 36px;
+    color: #ffd36a;
+    cursor: pointer;
+    z-index: 10000;
+    font-family: 'Munro', monospace;
+">&times;</span>
+
+<div class="game-container">
+
+    <!-- TOP -->
+    <div class="game-row-top">
+        <div class="main-boards-container">
+
+            <div class="board-row player-board">
+                <div class="big-board">
+                    <img src="/ui/manual/one_human.png" class="board-image">
+                    <div class="board-text">
+                        <div class="board-title">PLAYER MODE</div>
+                        <div class="board-content">
+                            Play as the Human and survive as long as possible.<br>
+                            You move one step, the monster moves two.<br>
+                            Use items that regenerate every 10 turns to stay alive.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="board-row monster-board">
+                <div class="big-board">
+                    <img src="/ui/manual/one_monster.png" class="board-image">
+                    <div class="board-text">
+                        <div class="board-title">MONSTER MODE</div>
+                        <div class="board-content">
+                            Play as the Monster and hunt the Human.<br>
+                            You move 2 steps per turn, keep closing the distance.<br>
+                            Track and eliminate—never let the Human escape.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- BOTTOM -->
+    <div class="game-row-bottom">
+        <div class="bottom-bar-container">
+
+            <!-- 控制说明竖卡（最左） -->
+            <div class="controls-card">
+
+                <div class="ctrl-section">
+                    <div class="key-cluster">
+                        <div class="key-row"><div class="key">▲</div></div>
+                        <div class="key-row">
+                            <div class="key">◀</div>
+                            <div class="key">▼</div>
+                            <div class="key">▶</div>
+                        </div>
+                    </div>
+                    <div class="ctrl-section-desc">Move</div>
+                </div>
+
+                <div class="ctrl-sep"></div>
+
+                <div class="ctrl-section">
+                    <div class="key-row"><div class="key wide">ESC</div></div>
+                    <div class="ctrl-section-desc"> Toggle Main Menu</div>
+                </div>
+
+                <div class="ctrl-sep"></div>
+
+                <div class="ctrl-section">
+                    <div class="key-row"><div class="key">M</div></div>
+                    <div class="ctrl-section-desc">Toggle Manual</div>
+                </div>
+
+            </div>
+
+            <!-- 道具卡 -->
+            <div class="small-board-vertical">
+                <div class="equip-icon-box">
+                    <img src="/ui/manual/boots.png" class="equip-icon-img">
+                </div>
+                <div class="equip-name">Swift Boots</div>
+                <div class="equip-desc">
+                    Grants 3 extra steps<br>
+                    Effect: Instant<br>
+                    Rarity: Common
+                </div>
+            </div>
+
+            <div class="small-board-vertical">
+                <div class="equip-icon-box">
+                    <img src="/ui/manual/frozen.png" class="equip-icon-img">
+                </div>
+                <div class="equip-name">Frost Trap</div>
+                <div class="equip-desc">
+                    Freezes monster for<br>
+                    3 turns on contact<br>
+                    Rarity: Common
+                </div>
+            </div>
+
+            <div class="small-board-vertical">
+                <div class="equip-icon-box">
+                    <img src="/ui/manual/door.png" class="equip-icon-img">
+                </div>
+                <div class="equip-name">Teleport Stone</div>
+                <div class="equip-desc">
+                    Teleports you 6+ tiles<br>
+                    from the monster<br>
+                    Rarity: Rare
+                </div>
+            </div>
+
+            <div class="small-board-vertical">
+                <div class="equip-icon-box">
+                    <img src="/ui/manual/cloak.png" class="equip-icon-img">
+                </div>
+                <div class="equip-name">Cloak</div>
+                <div class="equip-desc">
+                    Turns you invisible<br>
+                    for 4 steps; monster<br>
+                    stops moving
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

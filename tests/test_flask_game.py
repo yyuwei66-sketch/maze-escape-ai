@@ -28,6 +28,12 @@ class FlaskGameTest(unittest.TestCase):
         ):
             return self.client.post("/api/games", json=payload)
 
+    def assertMonsterPositions(self, monsters, expected):
+        self.assertEqual(
+            [{"row": monster["row"], "col": monster["col"]} for monster in monsters],
+            expected,
+        )
+
     def test_create_escape_game(self):
         response = self.make_game({"mode": "escape", "opponent_ai": "astar"})
 
@@ -69,7 +75,7 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(move.status_code, 200)
         data = move.get_json()
         self.assertEqual(data["human"], {"row": 1, "col": 0})
-        self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(data["step_count"], 1)
 
     def test_chase_move_renders_each_monster_step_before_bfs_human(self):
@@ -88,14 +94,14 @@ class FlaskGameTest(unittest.TestCase):
 
         self.assertEqual(first.status_code, 200)
         first_data = first.get_json()
-        self.assertEqual(first_data["monsters"], [{"row": 0, "col": 4}])
+        self.assertMonsterPositions(first_data["monsters"], [{"row": 0, "col": 4}])
         self.assertEqual(first_data["human"], {"row": 0, "col": 0})
         self.assertEqual(first_data["pending_monster_steps"], 1)
         self.assertEqual(first_data["step_count"], 0)
 
         self.assertEqual(second.status_code, 200)
         data = second.get_json()
-        self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(data["human"], {"row": 0, "col": 29})
         self.assertEqual(data["pending_monster_steps"], 0)
         self.assertEqual(data["step_count"], 1)
@@ -231,7 +237,7 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(move.status_code, 200)
         data = move.get_json()
         self.assertEqual(data["human"], {"row": 1, "col": 0})
-        self.assertEqual(data["monsters"], [{"row": 0, "col": 10}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 10}])
         self.assertEqual(data["effects"]["human_extra_steps"], 3)
         self.assertEqual(data["items"], [])
 
@@ -240,7 +246,7 @@ class FlaskGameTest(unittest.TestCase):
         ).get_json()
         self.assertEqual(second["human"], {"row": 1, "col": 1})
         self.assertEqual(second["effects"]["human_extra_steps"], 2)
-        self.assertEqual(second["monsters"], [{"row": 0, "col": 10}])
+        self.assertMonsterPositions(second["monsters"], [{"row": 0, "col": 10}])
 
         self.client.post(
             f"/api/games/{game_id}/move", json={"direction": "down"}
@@ -249,7 +255,7 @@ class FlaskGameTest(unittest.TestCase):
             f"/api/games/{game_id}/move", json={"direction": "left"}
         ).get_json()
         self.assertEqual(fourth["effects"]["human_extra_steps"], 0)
-        self.assertEqual(fourth["monsters"], [{"row": 0, "col": 8}])
+        self.assertMonsterPositions(fourth["monsters"], [{"row": 0, "col": 8}])
 
     def test_home_stone_teleports_to_a_safe_cell_and_ends_bonus_movement(self):
         response = self.make_game(
@@ -293,7 +299,7 @@ class FlaskGameTest(unittest.TestCase):
 
         self.assertEqual(move.status_code, 200)
         data = move.get_json()
-        self.assertEqual(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(
             data["monster_states"][0]["frozen_turns"],
             main.FREEZE_TRAP_DURATION,
@@ -313,7 +319,7 @@ class FlaskGameTest(unittest.TestCase):
 
         self.assertEqual(move.status_code, 200)
         data = move.get_json()
-        self.assertEqual(data["monsters"], [{"row": 0, "col": 5}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 5}])
         self.assertEqual(
             data["effects"]["human_invisible_turns"],
             main.INVISIBILITY_DURATION,

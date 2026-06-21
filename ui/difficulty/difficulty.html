@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="prefetch" href="/ui/play/human.html">
+    <link rel="preload" href="/ui/fonts/munro.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="preload" href="/ui/play/human_wait.png" as="image">
+    <link rel="preload" href="/ui/play/monster_wait.png" as="image">
+    <link rel="preload" href="/ui/play/back.png" as="image">
+    <link rel="preload" href="/ui/play/wood.png" as="image">
+    <link rel="preload" href="/ui/play/wooddown.png" as="image"><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Difficulty Selection</title>
+
+<style>
+@font-face {
+    font-family: 'Munro';
+    src: url('/ui/fonts/munro.ttf') format('truetype');
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Munro', sans-serif;
+}
+
+/* ================= 背景 ================= */
+
+.container {
+    width: 100%;
+    height: 100%;
+    background-image: url('/ui/difficulty/background.png');
+    background-size: cover;
+    background-position: center;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 35px;
+}
+
+/* ================= 标题 ================= */
+
+.title-board {
+    width: 65vw;
+    max-width: 650px;
+    height: 20vh;
+    min-height: 120px;
+
+    background-image: url('/ui/difficulty/long.png');
+    background-size: 100% 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: clamp(25px, 4vw, 45px);
+    color: #f4d03f;
+    font-weight: bold;
+
+    letter-spacing: 3px;
+
+    text-shadow:
+        3px 4px 0px #000,
+        0px 0px 8px rgba(255, 220, 120, 0.3);
+
+    filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.7));
+}
+
+/* ================= grid ================= */
+
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 35px 40px;
+}
+
+/* ================= 按钮 ================= */
+
+.menu-item {
+    width: 380px;
+    height: 95px;
+
+    background-image: url('/ui/difficulty/flower.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+
+    cursor: pointer;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    color: white;
+    font-size: 32px;
+
+    transition: transform 0.15s ease, filter 0.15s ease;
+
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+}
+
+/* ================= hover 高亮 ================= */
+
+.hover-group-1:hover { background-image: url('/ui/difficulty/blue.png'); }
+.hover-group-2:hover { background-image: url('/ui/difficulty/orange.png'); }
+.hover-group-3:hover { background-image: url('/ui/difficulty/red.png'); }
+
+/* ================= hover 动效 ================= */
+
+.menu-item:hover {
+    transform: scale(1.05);
+}
+
+
+/* ================= 点击弹跳动画 ================= */
+
+@keyframes clickPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.88); }
+    100% { transform: scale(1.05); }
+}
+
+.menu-item.clicked {
+    animation: clickPop 0.25s ease;
+}
+
+/* ================= 小字 ================= */
+
+.algo {
+    font-size: 17px;
+    color: #d8cbb0;
+    margin-top: 3px;
+}
+
+/* Hell 独占一行 */
+.menu-item:last-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+}
+
+/*弹窗*/
+/* ===== overlay ===== */
+.confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.75);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    z-index: 999;
+}
+
+.hidden { display: none; }
+
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="title-board">
+        CHOOSE YOUR DIFFICULTY
+    </div>
+
+    <div class="menu-grid">
+
+        <div class="menu-item hover-group-1" onclick="selectLevel('easy', this)">
+            Easy
+            <div class="algo">(algorithm: Greedy)</div>
+        </div>
+
+        <div class="menu-item hover-group-1" onclick="selectLevel('normal', this)">
+            Normal
+            <div class="algo">(algorithm: SA)</div>
+        </div>
+
+        <div class="menu-item hover-group-2" onclick="selectLevel('hard', this)">
+            Hard
+            <div class="algo">(algorithm: Minimax)</div>
+        </div>
+
+        <div class="menu-item hover-group-2" onclick="selectLevel('expert', this)">
+            Expert
+            <div class="algo">(algorithm: A*)</div>
+        </div>
+
+        <div class="menu-item hover-group-3" onclick="selectLevel('hell', this)">
+            Hell
+            <div class="algo">(Two Monsters)</div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+let pendingLevel = null;
+
+const ALGO_MAP = {
+    easy:   'Algorithm: Greedy · ★☆☆☆☆',
+    normal: 'Algorithm: SA · ★★☆☆☆',
+    hard:   'Algorithm: Minimax · ★★★☆☆',
+    expert: 'Algorithm: A* · ★★★★☆',
+    hell:   'Two Monsters · ★★★★★',
+};
+
+function selectLevel(level, el) {
+    el.classList.remove('clicked');
+    void el.offsetWidth;
+    el.classList.add('clicked');
+    pendingLevel = level;
+    document.getElementById('confirm-text').innerHTML =
+        `Ready to enter <span style="font-size:22px; color:#f4d03f; letter-spacing:3px;">${level.toUpperCase()} MODE</span> ?`;
+    document.getElementById('confirm-algo').textContent = ALGO_MAP[level] || '';
+    document.getElementById('confirm-overlay').classList.remove('hidden');
+}
+
+function confirmEnter() {
+    if (!pendingLevel) return;
+    window.location.href = "/ui/play/human.html?level=" + pendingLevel;
+}
+
+function cancelEnter() {
+    document.getElementById('confirm-overlay').classList.add('hidden');
+    pendingLevel = null;
+}
+</script>
+
+<div id="confirm-overlay" class="confirm-overlay hidden">
+    <div style="
+        width:380px;
+        background: linear-gradient(160deg, #3b2210 0%, #2a1a0a 60%, #1e1005 100%);
+        border: 4px solid #8b5c2a;
+        border-radius: 6px;
+        box-shadow: 0 0 0 2px #5a3510, inset 0 0 0 2px #6b3f18, 4px 4px 0 #000;
+        padding: 28px 30px 24px;
+        font-family: 'Munro', monospace;
+        text-align: center;
+        position: relative;
+    ">
+        <div style="
+            position:absolute; top:-18px; left:50%; transform:translateX(-50%);
+            background:#2a1a0a;
+            border: 3px solid #8b5c2a;
+            padding: 4px 22px;
+            border-radius: 4px;
+            font-size: 18px;
+            letter-spacing: 4px;
+            color: #e8a94a;
+            text-shadow: 1px 1px 0 #000;
+            white-space: nowrap;
+        ">⚔ CONFIRM ENTRY ⚔</div>
+
+        <div style="
+            margin: 18px 0 24px;
+            padding: 14px 16px;
+            background: rgba(0,0,0,0.35);
+            border: 2px solid #5a3510;
+            border-radius: 4px;
+        ">
+            <div id="confirm-text" style="font-size:15px; color:#c8a882; letter-spacing:1px; line-height:1.7;"></div>
+        </div>
+
+        <div style="
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid #4a2e10;
+            border-radius: 3px;
+            margin-bottom: 22px;
+            font-size: 12px;
+            color: #8a6a48;
+            letter-spacing: 1px;
+        " id="confirm-algo"></div>
+
+        <div style="display:flex; gap:16px; justify-content:center;">
+            <div onclick="confirmEnter()" style="
+                width: 120px; padding: 10px 0;
+                background: #1e3d1a;
+                border: 3px solid #4a8a3a;
+                border-bottom: 5px solid #2a5a20;
+                border-right: 4px solid #2a5a20;
+                border-radius: 3px;
+                font-size: 18px;
+                font-family: 'Munro', monospace;
+                color: #7de86a;
+                letter-spacing: 3px;
+                cursor: pointer;
+            ">YES</div>
+            <div onclick="cancelEnter()" style="
+                width: 120px; padding: 10px 0;
+                background: #3d1a1a;
+                border: 3px solid #8a3a3a;
+                border-bottom: 5px solid #5a2020;
+                border-right: 4px solid #5a2020;
+                border-radius: 3px;
+                font-size: 18px;
+                font-family: 'Munro', monospace;
+                color: #e87070;
+                letter-spacing: 3px;
+                cursor: pointer;
+            ">NO</div>
+        </div>
+
+        <div style="margin-top:18px; font-size:11px; color:#5a3f28; letter-spacing:2px;">
+            ── MAZE ESCAPE ──
+        </div>
+    </div>
+</div>
+
+    <script src="/ui/global-controls.js"></script>
+</body>
+</html>

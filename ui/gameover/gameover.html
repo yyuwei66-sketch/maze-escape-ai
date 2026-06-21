@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Over - Maze Escape</title>
+    <style>
+        /* ================= 字体与全屏背景 ================= */
+        @font-face {
+            font-family: 'Munro';
+            src: url('/ui/fonts/munro.ttf') format('truetype');
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-image: url('/ui/gameover/background.png');
+            background-size: cover;
+            background-position: center;
+            font-family: 'Munro', monospace; 
+            background-color: rgba(0, 0, 0, 0.55); 
+            background-blend-mode: overlay;
+        }
+
+        .go-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 0.5vh;
+        }
+
+        /* ================= 顶部 GAME OVER 木板标题 ================= */
+        .title-board {
+            position: relative;
+            width: 36vw;
+            max-width: 400px;
+            height: 14vh;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.8));
+            flex-shrink: 0;
+        }
+
+        .title-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            z-index: 1;
+        }
+
+        .title-text {
+            position: relative;
+            z-index: 2;
+            color:  #F4D03F; 
+            font-size: clamp(28px, 4vw, 50px);
+            text-shadow: 4px 4px 0px #000;
+            letter-spacing: 5px;
+            white-space: nowrap;
+        }
+
+        /* ================= 结算主卷轴 (横向) ================= */
+        .scroll-container {
+            position: relative;
+            width: 90vw;
+            max-width: 800px;
+            height: 62vh;
+            margin-top: -4vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            filter: drop-shadow(0px 15px 25px rgba(0,0,0,0.7));
+            flex-shrink: 0;
+        }
+
+        .scroll-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
+            z-index: 1;
+        }
+
+        /* ================= 核心对峙：卡牌明暗逻辑 ================= */
+        .showdown-box {
+            position: absolute;
+            top: 22%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            width: 80%;
+            height: 50%;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .card-wrapper {
+            position: relative;
+            width: 28%;
+            height: 95%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .char-card {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-size: 100% 100%;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: filter 0.3s ease, transform 0.3s ease;
+        }
+        
+        .card-bright {
+            background-image: url('/ui/gameover/light_card.png');
+            filter: drop-shadow(0px 0px 20px rgba(255, 140, 0, 0.8));
+            transform: scale(1.05);
+        }
+
+        .card-dim {
+            background-image: url('/ui/gameover/card.png');
+            filter: grayscale(100%) brightness(0.25);
+        }
+
+        .char-img {
+            height: 80%;
+            width: auto;
+            object-fit: contain;
+        }
+
+        /* ================= 印章特技动画 ================= */
+        .stamp {
+            position: absolute;
+            z-index: 10;
+            width: 65%;
+            max-width: 160px;
+            height: auto;
+            opacity: 0;
+            filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.6));
+            pointer-events: none;
+        }
+
+        .stamp-victory {
+            top: -15%;
+            left: -25%;
+            --end-rot: -12deg;
+            animation: stampSmash 0.4s ease-out 0.3s forwards; 
+        }
+
+        .stamp-defeat {
+            top: -15%;         
+            left: -25%;        
+            --end-rot: -15deg;   
+            animation: stampSmash 0.4s ease-out 0.7s forwards; 
+        }
+        
+        @keyframes stampSmash {
+            0% {
+                opacity: 0;
+                transform: scale(4) rotate(calc(var(--end-rot) + 30deg));
+            }
+            50% {
+                opacity: 1;
+                transform: scale(0.8) rotate(calc(var(--end-rot) - 5deg));
+            }
+            75% {
+                transform: scale(1.1) rotate(calc(var(--end-rot) + 2deg));
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(var(--end-rot));
+            }
+        }
+
+        /* ================= 硬核纯文字数据栏 (无图标) ================= */
+        .stats-box {
+            position: absolute;
+            bottom: 14%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+            width: 70%;
+            height: 14%;
+            border-top: 2px dashed rgba(46, 26, 15, 0.4); 
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around; 
+            align-items: center;
+        }
+
+        .stats-item {
+            color: #8B0000; 
+            font-size: clamp(20px, 2.6vw, 34px);
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.4);
+            white-space: nowrap;
+        }
+
+        .stats-value {
+            color: #8B0000; 
+            margin-left: 15px;
+        }
+
+        /* ================= 底部双木板按钮样式 ================= */
+        .btn-group {
+            display: flex;
+            flex-direction: row;
+            gap: 3vw; 
+            width: 50vw;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 0.5vh;
+        }
+
+        .go-btn {
+            position: relative;
+            width: 30%; 
+            max-width: 200px;
+            height: clamp(60px, 7vh, 100px); 
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            outline: none;
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+
+        .go-btn:hover {
+            transform: scale(1.05);
+            filter: brightness(1.15);
+        }
+
+       .btn-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            color: #F4D03F;
+            font-family: 'Munro', monospace; 
+            font-size: clamp(15px, 2.2vw, 24px);
+            white-space: nowrap;
+            text-shadow: 3px 3px 0px #000;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="go-container">
+        
+        <div class="title-board">
+            <img src="/ui/gameover/wood.png" class="title-bg" alt="board">
+            <span class="title-text">GAME OVER</span>
+        </div>
+
+        <div class="scroll-container">
+            <img src="/ui/gameover/scroll.png" class="scroll-bg" alt="scroll">
+
+            <div class="showdown-box">
+                <div class="card-wrapper">
+                    <div class="char-card card-bright">
+                        <img src="/ui/gameover/one_monster.png" class="char-img" alt="monster">
+                    </div>
+                    <img src="/ui/gameover/victory.png" class="stamp stamp-victory" alt="Victory">
+                </div>
+
+                <div class="card-wrapper">
+                    <div class="char-card card-dim">
+                        <img src="/ui/gameover/one_human.png" class="char-img" alt="human">
+                    </div>
+                    <img src="/ui/gameover/default.png" class="stamp stamp-defeat" alt="Defeat">
+                </div>
+            </div>
+
+            <div class="stats-box">
+                <div class="stats-item">STEPS:<span class="stats-value">124</span></div>
+                <div class="stats-item">ITEMS USED:<span class="stats-value">3</span></div>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="go-btn" id="btn-again">
+                <img src="/ui/gameover/wood.png" class="title-bg" alt="board">
+                <span class="btn-text">PLAY AGAIN</span>
+            </button>
+
+            <button class="go-btn" id="btn-menu">
+                <img src="/ui/gameover/wood.png" class="title-bg" alt="board">
+                <span class="btn-text">MAIN MENU</span>
+            </button>
+        </div>
+
+    </div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const mode  = params.get('mode')  || 'human';
+    const steps = params.get('steps') || '0';
+    const items = params.get('items') || '0';
+    const level = params.get('level') || 'easy';
+
+    // 填充步数数据
+    const statsBox = document.querySelector('.stats-box');
+    if (mode === 'monster') {
+        statsBox.innerHTML = `
+            <div class="stats-item">STEPS:<span class="stats-value">${steps}</span></div>
+            <div class="stats-item">MODE:<span class="stats-value">CHASE</span></div>
+        `;
+    } else {
+        statsBox.innerHTML = `
+            <div class="stats-item">STEPS:<span class="stats-value">${steps}</span></div>
+            <div class="stats-item">ITEMS USED:<span class="stats-value">${items}</span></div>
+        `;
+    }
+
+    // PLAY AGAIN：根据模式跳回对应页面
+    document.getElementById('btn-again').onclick = () => {
+        if (mode === 'monster') {
+            window.location.href = '/ui/play/monster.html';
+        } else {
+            window.location.href = `/ui/play/human.html?level=${level}`;        
+        }
+    };
+
+    // MAIN MENU
+    document.getElementById('btn-menu').onclick = () => {
+        window.location.href = '/ui/index/index.html';
+    };
+</script>
+
+    <script src="/ui/global-controls.js"></script>
+
+</body>
+</html>
