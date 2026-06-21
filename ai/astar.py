@@ -13,6 +13,8 @@ def wrap(pos: tuple[int, int]) -> tuple[int, int]:
 def heuristic(a: tuple[int, int], b: tuple[int, int]) -> int:
     dr = abs(a[0] - b[0])
     dc = abs(a[1] - b[1])
+    dr = min(dr, GRID_SIZE - dr)
+    dc = min(dc, GRID_SIZE - dc)
     return dr + dc
 
 

@@ -11,6 +11,8 @@ const string MAP_FILE_PATH="../map/generated_map.txt";
 const string OUTPUT_FILE_PATH="../map/generated_map.txt";
 int xh,yh;
 int xm,ym;
+int previous_xh=-1,previous_yh=-1;
+bool has_previous_human=false;
 bool mp[30][30];//true if unavailable, false if available, read from file
 int dis[30][30];
 struct Node
@@ -46,6 +48,16 @@ int main()
 
     fin>>xh>>yh;//human
     fin>>xm>>ym;//monster
+    int previousHumanFlag=0;
+    if(fin>>previousHumanFlag)
+    {
+        if(previousHumanFlag==2&&fin>>previous_xh>>previous_yh)
+        {
+            previous_xh=wrap(previous_xh);
+            previous_yh=wrap(previous_yh);
+            has_previous_human=true;
+        }
+    }
 
     Node tmp;
     tmp.x=xm;
@@ -92,7 +104,6 @@ int main()
         return 1;
     }
 
-    int d_max=max(down,max(up,max(right,left)));
     for(int i=0;i<30;i++)
     {
         for(int j=0;j<30;j++)
@@ -103,10 +114,36 @@ int main()
     }
 
     vector<pair<int,int>> bestMoves;
-    if(down==d_max)bestMoves.push_back({wrap(xh+1),yh});
-    if(up==d_max)bestMoves.push_back({wrap(xh-1),yh});
-    if(right==d_max)bestMoves.push_back({xh,wrap(yh+1)});
-    if(left==d_max)bestMoves.push_back({xh,wrap(yh-1)});
+    vector<pair<int,pair<int,int>>> candidates={
+        {down,{wrap(xh+1),yh}},
+        {up,{wrap(xh-1),yh}},
+        {right,{xh,wrap(yh+1)}},
+        {left,{xh,wrap(yh-1)}}
+    };
+
+    int d_max=-1;
+    for(const auto& candidate:candidates)
+    {
+        const auto& pos=candidate.second;
+        if(has_previous_human&&pos.first==previous_xh&&pos.second==previous_yh)continue;
+        if(candidate.first>d_max)d_max=candidate.first;
+    }
+
+    for(const auto& candidate:candidates)
+    {
+        const auto& pos=candidate.second;
+        if(has_previous_human&&pos.first==previous_xh&&pos.second==previous_yh)continue;
+        if(candidate.first==d_max)bestMoves.push_back(pos);
+    }
+
+    if(bestMoves.empty())
+    {
+        d_max=max(down,max(up,max(right,left)));
+        if(down==d_max)bestMoves.push_back({wrap(xh+1),yh});
+        if(up==d_max)bestMoves.push_back({wrap(xh-1),yh});
+        if(right==d_max)bestMoves.push_back({xh,wrap(yh+1)});
+        if(left==d_max)bestMoves.push_back({xh,wrap(yh-1)});
+    }
 
     random_device rd;
     mt19937 rng(rd());

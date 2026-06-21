@@ -173,7 +173,7 @@ bool applyItemEffect(
     std::vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const std::vector<std::vector<int>>& grid,
-    const std::vector<MonsterState>& monsters
+    std::vector<MonsterState>& monsters
 );
 
 bool checkPlayerItemPickup(
@@ -182,7 +182,7 @@ bool checkPlayerItemPickup(
     std::vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const std::vector<std::vector<int>>& grid,
-    const std::vector<MonsterState>& monsters
+    std::vector<MonsterState>& monsters
 );
 
 void checkMonsterTrap(

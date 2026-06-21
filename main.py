@@ -99,6 +99,7 @@ class GameState:
     monster_frozen_turns: List[int] = field(default_factory=list)
     last_monster_paths: List[List[Pos]] = field(default_factory=list)
     sa_previous_move: Tuple[Pos, Pos] | None = None
+    bfs_previous_human: Pos | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def serialize(self) -> dict[str, Any]:
@@ -492,14 +493,10 @@ def apply_item_effect(game: GameState, item: ItemState) -> bool:
         item.active = False
         return True
     if item.type == "freeze_trap":
-        game.traps.append(
-            ItemState(
-                type="freeze_trap",
-                pos=item.pos,
-                active=True,
-                lifetime=FREEZE_TRAP_LIFETIME,
-            )
-        )
+        while len(game.monster_frozen_turns) < len(game.monsters):
+            game.monster_frozen_turns.append(0)
+        for index in range(len(game.monsters)):
+            game.monster_frozen_turns[index] = FREEZE_TRAP_DURATION
         item.active = False
         return False
     if item.type == "invisibility_cloak":
@@ -624,14 +621,17 @@ def planned_monster_paths(game: GameState) -> List[List[Pos]]:
     if ai_name in {"greedy", "minimax"}:
         return planned_controller_paths(game, ai_name)
     if ai_name == "sa":
-        _, monster = run_cpp_map_algorithm(
-            "sa",
-            game.grid,
-            game.human,
-            game.monsters[0],
-            sa_previous_move=game.sa_previous_move,
-        )
-        return [[game.monsters[0], monster]]
+        try:
+            _, monster = run_cpp_map_algorithm(
+                "sa",
+                game.grid,
+                game.human,
+                game.monsters[0],
+                sa_previous_move=game.sa_previous_move,
+            )
+            return [[game.monsters[0], monster]]
+        except CppAlgorithmError:
+            return [limited_path(game.grid, game.monsters[0], game.human, 2)]
     raise ValueError(f"unsupported monster AI: {ai_name}")
 
 
@@ -799,14 +799,17 @@ def move_monsters_controller(game: GameState, controller_name: str) -> List[Pos]
 
 
 def move_human_with_bfs(game: GameState) -> Pos:
+    previous_human = game.human
     human, _ = run_cpp_map_algorithm(
         "bfs",
         game.grid,
         game.human,
         game.monsters[0],
+        bfs_previous_human=game.bfs_previous_human,
     )
     if not is_floor(game.grid, human):
         return game.human
+    game.bfs_previous_human = previous_human
     return human
 
 
