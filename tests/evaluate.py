@@ -236,13 +236,16 @@ def evaluate(name: str, fn, maps: List[Tuple]) -> Dict[str, Any]:
         results.append(simulate(grid, human, [monster], fn))
         if (i+1) % 10 == 0:
             print(f"    {i+1}/{len(maps)}", flush=True)
-    sa = np.array([r.steps for r in results], dtype=float)
+    # Catch-time statistics describe successful captures only.  Games that
+    # reach MAX_STEPS are still reflected in caught_rate, but treating their
+    # cutoff as a real catch time would skew the mean/median upward.
+    sa = np.array([r.steps for r in results if r.caught], dtype=float)
     ta = np.array([t*1000 for r in results for t in r.step_times] or [0.0])
     return {
         "name": name,
-        "steps_mean":    float(np.mean(sa)),
-        "steps_median":  float(np.median(sa)),
-        "steps_std":     float(np.std(sa)),
+        "steps_mean":    float(np.mean(sa)) if sa.size else float("nan"),
+        "steps_median":  float(np.median(sa)) if sa.size else float("nan"),
+        "steps_std":     float(np.std(sa)) if sa.size else float("nan"),
         "steps_all":     sa.tolist(),
         "time_mean_ms":  float(np.mean(ta)),
         "time_median_ms":float(np.median(ta)),

@@ -1,148 +1,137 @@
 \subsubsection{Simulated Annealing}
 
-In the third difficulty, 
-we use Simulated Annealing to plan the route for the monster AI.
-Although Simulated Annealing can not guarantee finding the shortest path,
-it can still be used to obtain a near-optimal path, 
-which is sufficient for our Monster AI. In this project, the purpose of SA is
-not only to chase the human efficiently, but also to make the monster's route
-less rigid than a purely deterministic shortest-path algorithm. Therefore, the
-SA planner is designed to keep enough pursuit pressure while still allowing
-small variations between similar candidate paths.
+At the third difficulty level, Simulated Annealing (SA) is used to plan the
+monster's movement. Unlike A* or BFS, SA does not require every intermediate
+candidate to be a wall-free shortest path. Instead, it searches over complete,
+continuous routes from the monster to the human and assigns large costs to
+routes that cross walls. This representation makes mutations inexpensive while
+allowing the algorithm to explore routes that differ substantially from the
+current one. Since the monster executes only the first two steps of a route
+before replanning, the objective gives particular importance to the beginning
+of the path and a wall-aware BFS is retained as a final safety mechanism.
 
-Initially, the initial state is built by greedy search
-with toroidal Manhattan distance as its heuristic function.
-However, after some tests, we found that in some cases,
-greedy search might fail to reach the target,
-causing the entire simulated annealing process to fail.
-Therefore, we used Depth-First Search(DFS) to generate the initial state.
-The DFS prefers moves that are closer to the human using toroidal Manhattan distance,
-but it also shuffles candidates so the path is not completely deterministic.
-This means that the initial path is usually directed toward the human, while
-still preserving some diversity in the order of exploration. Several tests
-proved that this metric is effective enough to reach the target state in most
-valid maps, and the time complexity is also acceptable because the DFS gives
-priority to cells with smaller Manhattan distance.
-
-The Simulated Anealing generates neibour solution by cutting the current path at a random point 
-and trying to rebuild the remaining path from that cut point to the human. The
-prefix before the cut point is kept unchanged, and the suffix is rebuilt by the
-same DFS-based method. If the rebuilt suffix reaches the human, the candidate
-path becomes a new complete route. If the search cannot reconnect to the human
-within the limit, the truncated path can still be evaluated. This design is
-useful for gameplay because the monster only executes the first two steps of
-the planned path in each round, so a candidate route can still provide a useful
-short-term movement decision even if its far endpoint is not perfect.
-The cost of each state is calculated by the following function:
+The maze is treated as a torus. For two cells $a=(a_x,a_y)$ and
+$b=(b_x,b_y)$, their heuristic distance is
 \[
-E(P)=Cost(P)-J(P)+Repeat(P)+\Delta(P).
+D_T(a,b)=
+\min(|a_x-b_x|,30-|a_x-b_x|)
++\min(|a_y-b_y|,30-|a_y-b_y|).
 \]
-The first term is the chase cost:
-\[
-Cost(P)=|P|+3D_M(p_{\mathrm{move}},h)+0.5D_M(p_{\mathrm{end}},h).
-\]
-Here, \(|P|\) keeps the planned path short, \(p_{\mathrm{move}}\) is the
-position reached after the monster's two actual movement steps, and
-\(p_{\mathrm{end}}\) is the last point of the planned path. \(D_M(\cdot,h)\) is
-the toroidal Manhattan distance to the human. \(D_M(p_{\mathrm{move}},h)\) is
-added to encourage the monster to move towards the human, while
-\(D_M(p_{\mathrm{end}},h)\) is added to penalize routes that fail to reach the
-target. Since only the first two steps of the planned route are used in each
-round, the second term is given a larger weight than the third term. This makes
-the score focus on whether the move made in the current round increases the
-monster's pressure on the human, rather than requiring every candidate path to
-be a fully optimal route to the target.
+The initial state is a random toroidal Manhattan shortest path from the monster
+to the human. The required horizontal and vertical moves are calculated first
+and then shuffled. When two wrap-around directions have the same length, one is
+selected randomly. Consequently, the initial path is continuous and always
+ends at the human, but it deliberately ignores walls. Wall avoidance is then
+introduced through mutation and the energy function.
 
-The second term rewards junction control:
+To generate a neighbouring state, the algorithm selects two points on the
+current path and rebuilds the segment between them. With probability $0.70$,
+the left endpoint is fixed at the monster's current position so that the
+mutation can change the two steps that will actually be executed. Half of these
+early mutations rebuild the path all the way to the human; the other half use a
+right endpoint no more than 30 path positions away. For a non-early mutation,
+the left endpoint is sampled uniformly from the path and the right endpoint is
+selected within the same 30-position span.
+
+The replacement segment is constructed by a wall-aware greedy search for at
+most 80 steps. At each step, it chooses a walkable neighbour with minimum
+toroidal Manhattan distance to the segment endpoint. Unvisited cells and moves
+that do not immediately backtrack are preferred, while equal candidates are
+shuffled to preserve variation. If the greedy search does not reach the right
+endpoint within its budget, a random toroidal shortest path is appended to
+close the segment. This closing part may cross walls, but the resulting route
+must remain continuous, start at the monster, end at the human, and contain no
+more than 140 cells. A candidate that fails these structural checks is rejected
+immediately.
+
+For a path $P=(p_0,p_1,\ldots,p_{n-1})$, let $h$ be the human position and
+$p_{\mathrm{move}}=p_{\min(2,n-1)}$ be the position reached after the move
+executed in the current turn. The energy minimized by SA is
 \[
-J(P)=\min\left(6,\sum_i j_i\right),
-\qquad
-j_i=
+E(P)=|P|+3D_T(p_{\mathrm{move}},h)
++0.5D_T(p_{n-1},h)+W(P)+R(P).
+\]
+The path-size term favours short routes, while the larger weight on
+$D_T(p_{\mathrm{move}},h)$ makes the immediate action maintain pursuit
+pressure. All structurally accepted candidates end at the human, so the
+endpoint-distance term is normally zero; it is retained as a defensive scoring
+term for any incomplete path that may be introduced by future changes.
+
+The wall cost distinguishes cells near the executable part of the route from
+those farther in the future:
+\[
+W(P)=\sum_{i=1}^{n-1}
 \begin{cases}
-2.0, & \deg(p_i)\ge 3\text{ and }i<6,\\
-0.5, & \deg(p_i)\ge 3\text{ and }i\ge 6,\\
-0, & \text{otherwise,}
+10000, & p_i\text{ is a wall and }i\leq 6,\\
+100,   & p_i\text{ is a wall and }i>6,\\
+0,     & p_i\text{ is walkable.}
 \end{cases}
 \]
-where \(\deg(p_i)\) is the number of walkable neighboring cells. Since
-\(J(P)\) is also subtracted, the monster is encouraged to pass through
-junctions, which gives it more possible future routes and makes its movement
-harder for the player to predict. The first few cells receive a larger reward
-because they are the cells that can affect the monster's immediate behaviour in
-the current turn. The cap of \(6\) prevents a long path from gaining too much
-score advantage simply by passing through many junctions.
+The very large early penalty strongly discourages an illegal current move. The
+smaller later penalty still guides the search towards a fully walkable path,
+but permits SA to pass through temporarily poor intermediate states. Because a
+new route is planned every turn, the first six steps are more important than a
+distant suffix that may never be executed.
 
-The third term uses the previous SA move:
+The final term reduces visible oscillation between turns:
 \[
-Repeat(P)=10I(p_{\mathrm{move}}=p_{\mathrm{prev,start}}).
+R(P)=10I(p_{\mathrm{move}}=p_{\mathrm{prev,start}}),
 \]
-This term penalizes immediately moving back to the previous starting cell. It
-adds a small amount of cross-turn variation without punishing the monster for
-continuing in the same direction when that direction is still a good chase
-choice. In other words, the monster is allowed to keep pursuing directly, but
-it is discouraged from visibly oscillating between two cells.
+where $p_{\mathrm{prev,start}}$ is the monster position at the beginning of
+the previous SA move. The game backend records the previous movement and passes
+it to the C++ planner on the next turn. Thus, returning immediately to the
+previous starting cell is discouraged without preventing the monster from
+continuing a useful direction of pursuit.
 
-Finally, the fourth term adds small route variation:
+For a candidate $P'$, an improvement is always accepted. A worse candidate is
+accepted with probability
 \[
-\Delta(P)=2\cdot \frac{1}{k}\sum_{i=0}^{k-1} \delta(p_i),
-\qquad
-k=\min(|P|,6),
+\Pr(P\rightarrow P')=
+\exp\left(\frac{E(P)-E(P')}{T}\right).
 \]
-where \(\delta(p_i)\in[-1,1]\) is a random cell cost generated once at the start of
-the current SA run. This term is applied only to the first six cells because the
-monster only moves two steps after planning, so early route variation matters
-more than changes near the end of the path. The weight of this term is small,
-so it mainly changes the choice between paths with similar chase quality. It
-does not dominate the chase cost, which prevents the monster from wandering
-randomly.
-
-Overall, the objective still minimizes path length and strongly prefers paths
-that move toward the human. The random, junction, and previous-move terms are
-deliberately smaller, so they mainly act as tie breakers between similar chase
-paths rather than making the monster wander randomly.
-
-The SA parameters were tuned with two goals: the monster decision should be fast
-enough for real-time play, and the optimized path should still be shorter than
-the DFS initial path in most generated maps. The original setting used
-200 candidate path trials at each temperature level, an initial temperature of
-\(1000\), a minimum temperature of \(0.001\), and a cooling rate of \(0.995\).
-This produced about \(551600\) path mutations in one SA call. Although this
-setting could improve the path quality, the average wall-clock time on five
-generated maps was about \(3807.27\) ms, which was too slow for interactive
-gameplay.
-
-Therefore, we reduced the search budget step by step. The main parameters were
-the number of candidate trials at each temperature level, the initial
-temperature, the minimum stopping temperature, the cooling rate, and the DFS
-search limit used when rebuilding a path after a random cut. Reducing the number
-of candidate trials and using a faster cooling rate directly lowered the number
-of candidate paths tested. However, making the search too small also reduced the
-benefit of SA. For example, a very small configuration with about \(165\)
-mutations improved only one out of five maps, while a configuration with about
-\(450\) mutations still improved three out of five maps but was less reliable
-on difficult layouts.
+This permits broad exploration at high temperature and increasingly selective
+search as the temperature falls. The implementation also tracks the best
+accepted route whose first two steps are both adjacent and walkable. That route
+is preferred to a lower-scoring route that the monster cannot execute safely.
 
 \begin{table}[H]
 \centering
-\caption{Representative simulated annealing tuning results}
-\begin{tabular}{lrrrr}
+\caption{Default simulated annealing parameters}
+\begin{tabular}{lr}
 \toprule
-Setting & Mutations & Avg. time (ms) & DFS/SA length & Improved maps \\
+Parameter & Value \\
 \midrule
-Original setting & 551600 & 3807.27 & 49.0 / 35.0 & 4/5 \\
-Fast setting & 1800 & 37.09 & 49.0 / 41.4 & 4/5 \\
-Very small setting & 165 & -- & -- & 1/5 \\
-Final setting & 9080 & 280.00 & 65.4 / 40.2 & 5/5 \\
+Candidate trials per temperature & 20 \\
+Initial temperature & 80 \\
+Minimum temperature & 0.5 \\
+Cooling rate & 0.94 \\
+Immediate-move distance weight & 3 \\
+Normal wall penalty & 100 \\
+Wall penalty in the first six steps & 10000 \\
+Greedy segment-rebuild budget & 80 steps \\
+Maximum local segment span & 30 path positions \\
+Probability of an early mutation & 0.70 \\
+Maximum candidate path size & 140 cells \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The final configuration uses 40 candidate trials at each temperature level, an
-initial temperature of \(100\), a minimum stopping temperature of \(0.1\), a
-cooling rate of \(0.97\), and a reconnection DFS search limit of 80. This
-configuration performs about \(9080\) path mutations per SA call. In a test on
-five newly generated maps, all five runs finished within one second, with an
-average wall-clock time of \(280.00\) ms. The average DFS path length was
-\(65.4\), while the average SA path length was reduced to \(40.2\). This shows
-that the final parameters keep the algorithm responsive while preserving enough
-search quality to improve the initial DFS route.
+With these defaults, the temperatures are $80,80(0.94),80(0.94)^2,\ldots$
+while $T>0.5$. This gives 83 temperature levels and $83\times20=1660$
+candidate mutations per call. The parameters can also be overridden from the
+command line, and a fixed random seed can be supplied for reproducible tests.
+
+After annealing, the monster uses the best accepted route with legal first
+steps. If no such route is found, a wall-aware toroidal BFS constructs a safe
+fallback path. The selected route is checked once more before output, ensuring
+that the monster never finishes its turn inside a wall even though SA is
+allowed to evaluate wall-crossing candidates during the search.
+
+The current configuration was selected from the obstacle-penalty SA experiment.
+On five held-out generated maps with five fixed random seeds per map, it caught
+the human in 24 of 25 games. Its mean planning time was $6.72$ ms, the 95th
+percentile was $10.16$ ms, and the maximum was $12.35$ ms. No BFS fallback
+was required and the selected routes contained no wall visits in these runs.
+These results do not prove global optimality, but they show that the method is
+fast enough for interactive play and that the penalty-based search can retain
+safe movement while producing varied routes.
