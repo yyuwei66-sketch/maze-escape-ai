@@ -25,6 +25,7 @@ ai/genetic_map
 ai/*.dSYM/
 ai/finetune.md
 paper/report.md
+temp/
 
 # LaTeX temporary files
 .texmf-var/
