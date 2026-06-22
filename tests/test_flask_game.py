@@ -302,6 +302,65 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(dashed["human"], {"row": 4, "col": 2})
         self.assertEqual(dashed["effects"]["speed_boots_turns"], 3)
 
+    def test_boots_stop_before_wall_after_partial_multi_cell_move(self):
+        grid = open_grid()
+        grid[0][2] = 1
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            grid=grid,
+            spawns=((0, 0), (0, 10)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.human_speed_boots_turns = 2
+        game.monster_frozen_turns = [99]
+
+        move = self.client.post(
+            f"/api/games/{game_id}/move",
+            json={"direction": "right", "dashRequested": True},
+        )
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertEqual(data["human"], {"row": 0, "col": 1})
+        self.assertEqual(data["effects"]["speed_boots_turns"], 1)
+
+    def test_multi_cell_move_picks_up_intermediate_item(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
+            spawns=((0, 0), (0, 10)),
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.human_speed_boots_turns = 2
+        game.monster_frozen_turns = [99]
+        game.items = [main.ItemState(type="invisibility_cloak", pos=(0, 1))]
+
+        data = self.client.post(
+            f"/api/games/{game_id}/move", json={"direction": "right"}
+        ).get_json()
+
+        self.assertEqual(data["human"], {"row": 0, "col": 2})
+        self.assertEqual(data["invisibleTurns"], main.INVISIBILITY_DURATION)
+        self.assertEqual(data["pickedItems"], ["invisibility_cloak"])
+        self.assertIn("Invisibility Cloak activated", data["message"])
+
+    def test_state_exposes_dash_and_canonical_effect_fields(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "astar", "item_count": 0}
+        )
+        game_id = response.get_json()["game_id"]
+        game = main.games[game_id]
+        game.human_speed_boots_turns = 3
+        game.human_invisible_turns = 2
+
+        data = self.client.get(f"/api/games/{game_id}").get_json()
+
+        self.assertEqual(data["speedBootsTurns"], 3)
+        self.assertEqual(data["invisibleTurns"], 2)
+        self.assertTrue(data["dashAvailable"])
+        self.assertNotIn("human_extra_steps", data["effects"])
+
     def test_home_stone_teleports_to_a_safe_cell_and_ends_bonus_movement(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
@@ -324,6 +383,28 @@ class FlaskGameTest(unittest.TestCase):
             main.distance_field(game.grid, [(0, 10)])[human[0]][human[1]],
             main.TELEPORT_SAFE_DISTANCE,
         )
+
+    def test_safe_teleport_excludes_monsters_items_and_traps(self):
+        game = main.GameState(
+            grid=open_grid(),
+            human=(0, 0),
+            human_spawn=(0, 0),
+            monsters=[(5, 5), (20, 20)],
+            mode="escape",
+            opponent_ai="astar",
+            monster_frozen_turns=[0, 0],
+            items=[main.ItemState(type="speed_boots", pos=(10, 10))],
+            traps=[main.ItemState(type="freeze_trap", pos=(15, 15))],
+        )
+
+        with patch("main.random.choice", side_effect=lambda cells: cells[0]):
+            target = main.find_safe_teleport_position(game)
+
+        self.assertNotEqual(target, game.human)
+        self.assertNotIn(target, game.monsters)
+        self.assertNotEqual(target, (10, 10))
+        self.assertNotEqual(target, (15, 15))
+        self.assertEqual(game.grid[target[0]][target[1]], 0)
 
     def test_freeze_trap_stops_monster_after_it_steps_on_trap(self):
         response = self.make_game(
@@ -393,6 +474,22 @@ class FlaskGameTest(unittest.TestCase):
             data["effects"]["human_invisible_turns"],
             main.INVISIBILITY_DURATION,
         )
+
+    def test_dual_monsters_both_respect_freeze(self):
+        game = main.GameState(
+            grid=open_grid(),
+            human=(0, 0),
+            human_spawn=(0, 0),
+            monsters=[(0, 5), (5, 0)],
+            mode="escape",
+            opponent_ai="astar",
+            monster_frozen_turns=[3, 3],
+        )
+
+        moved = main.move_monsters_with_item_effects(game)
+
+        self.assertEqual(moved, [(0, 5), (5, 0)])
+        self.assertEqual(game.last_monster_paths, [[(0, 5)], [(5, 0)]])
 
 
 if __name__ == "__main__":

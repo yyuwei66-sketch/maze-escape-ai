@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+import math
 import random
 from typing import Any, Dict, List, Sequence, Tuple
 import uuid
@@ -116,6 +117,8 @@ class GameState:
     bfs_previous_human: Pos | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     human_direction_history: List[str] = field(default_factory=list)
+    turn_messages: List[str] = field(default_factory=list)
+    turn_picked_items: List[ItemKind] = field(default_factory=list)
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -145,9 +148,12 @@ class GameState:
             "effects": {
                 "human_invisible_turns": self.human_invisible_turns,
                 "speed_boots_turns": self.human_speed_boots_turns,
-                "human_extra_steps": self.human_speed_boots_turns,
                 "monster_frozen_turns": list(self.monster_frozen_turns),
             },
+            "speedBootsTurns": self.human_speed_boots_turns,
+            "invisibleTurns": self.human_invisible_turns,
+            "dashAvailable": self.mode == "escape" and self.human_speed_boots_turns > 0,
+            "pickedItems": list(self.turn_picked_items),
             "mode": self.mode,
             "opponent_ai": self.opponent_ai,
             "step_count": self.step_count,
@@ -405,6 +411,7 @@ def find_safe_teleport_position(
     game: GameState,
     min_distance: int = TELEPORT_SAFE_DISTANCE,
 ) -> Pos:
+    del min_distance  # Kept for compatibility; selection is always from the safest 10%.
     distances = distance_field(game.grid, game.monsters)
     occupied = set(game.monsters)
     occupied.update(item.pos for item in game.items if item.active)
@@ -420,7 +427,7 @@ def find_safe_teleport_position(
     if not candidates:
         return game.human
     candidates.sort(key=lambda entry: entry[0], reverse=True)
-    safest_count = max(1, len(candidates) // 10)
+    safest_count = max(1, math.ceil(len(candidates) * 0.10))
     return random.choice([pos for _, pos in candidates[:safest_count]])
 
 
@@ -508,12 +515,15 @@ def decay_effects_after_human_step(
 def apply_item_effect(game: GameState, item: ItemState) -> bool:
     """Apply a picked-up item. Return True when movement should stop."""
 
+    game.turn_picked_items.append(item.type)
     if item.type == "speed_boots":
         game.human_speed_boots_turns = SPEED_BOOTS_DURATION
+        game.turn_messages.append("Speed Boots activated")
         item.active = False
         return False
     if item.type == "home_stone":
         game.human = find_safe_teleport_position(game)
+        game.turn_messages.append("Player teleported")
         item.active = False
         return True
     if item.type == "freeze_trap":
@@ -523,10 +533,12 @@ def apply_item_effect(game: GameState, item: ItemState) -> bool:
             game.monster_frozen_turns[index] = max(
                 game.monster_frozen_turns[index], FREEZE_TRAP_DURATION
             )
+        game.turn_messages.append("Monsters frozen")
         item.active = False
         return False
     if item.type == "invisibility_cloak":
         game.human_invisible_turns = INVISIBILITY_DURATION
+        game.turn_messages.append("Invisibility Cloak activated")
         game.cloak_already_spawned = True
         item.active = False
         return False
@@ -575,11 +587,16 @@ def move_human_with_items(game: GameState, direction: str, dash_requested: bool 
 
 def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
     assert_running(game)
+    game.turn_messages.clear()
+    game.turn_picked_items.clear()
+    game.message = ""
     if game.mode == "escape":
         direction = str(payload.get("direction", "")).lower()
         dash_requested = (
             payload.get("dashRequested", payload.get("dash", False)) is True
         )
+        if dash_requested and game.human_speed_boots_turns > 0:
+            game.turn_messages.append("Dash used")
         move_human_with_items(game, direction, dash_requested)
         if not catches_human(game):
             game.monsters = move_monsters_with_item_effects(game)
@@ -601,6 +618,8 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
     if game.mode == "escape" and game.step_count % ITEM_SPAWN_INTERVAL == 0:
         spawn_random_items(game, ITEM_SPAWN_COUNT)
     update_status(game)
+    if game.status == "running":
+        game.message = "; ".join(game.turn_messages)
 
 
 def catches_human(game: GameState) -> bool:
@@ -1266,8 +1285,8 @@ INDEX_HTML = """<!doctype html>
       const pending = game.mode === "chase" && game.status === "running"
         ? ` | monster step: ${game.pending_monster_steps}/2`
         : "";
-      const bonus = game.effects?.human_extra_steps > 0
-        ? ` | boots: ${game.effects.speed_boots_turns}`
+      const boots = game.effects?.speed_boots_turns > 0
+        ? ` | Speed Boots: ${game.effects.speed_boots_turns}`
         : "";
       const invisible = ` | invisible: ${game.effects?.human_invisible_turns || 0}`;
       const frozen = ` | frozen: ${(game.effects?.monster_frozen_turns || []).join(", ")}`;
@@ -1275,7 +1294,7 @@ INDEX_HTML = """<!doctype html>
       dash.disabled = game.mode !== "escape" || (game.effects?.speed_boots_turns || 0) <= 0;
       if (dash.disabled) dashRequested = false;
       dash.textContent = dashRequested ? "Dash ON" : "Dash OFF";
-      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count}${pending}${bonus}${invisible}${frozen} | ${game.status}${game.message ? " | " + game.message : ""}`;
+      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count}${pending}${boots}${invisible}${frozen} | ${game.status}${game.message ? " | " + game.message : ""}`;
     }
 
     document.getElementById("start-escape").addEventListener("click", () => startGame("escape"));

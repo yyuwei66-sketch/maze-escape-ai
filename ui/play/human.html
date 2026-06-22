@@ -356,8 +356,12 @@ canvas{
                         <span class="value text-yellow" id="stat-invisible">0</span>
                     </div>
                     <div class="info-row">
-                        <span class="label">Monsters frozen:</span>
-                        <span class="value text-blue" id="stat-frozen">0</span>
+                        <span class="label">Monster 1 Frozen:</span>
+                        <span class="value text-blue" id="stat-frozen-1">0</span>
+                    </div>
+                    <div class="info-row" id="stat-frozen-2-row" hidden>
+                        <span class="label">Monster 2 Frozen:</span>
+                        <span class="value text-blue" id="stat-frozen-2">0</span>
                     </div>
                     <button id="dash-toggle" type="button" disabled>Dash OFF</button>
                 </div>
@@ -615,8 +619,10 @@ function updateItemPanel() {
     const boots = effects.speed_boots_turns || 0;
     document.getElementById('stat-speed-boots').textContent = boots;
     document.getElementById('stat-invisible').textContent = effects.human_invisible_turns || 0;
-    document.getElementById('stat-frozen').textContent =
-        (effects.monster_frozen_turns || []).map((turns, i) => `M${i + 1}: ${turns}`).join(', ') || '0';
+    const frozen = effects.monster_frozen_turns || [];
+    document.getElementById('stat-frozen-1').textContent = frozen[0] || 0;
+    document.getElementById('stat-frozen-2').textContent = frozen[1] || 0;
+    document.getElementById('stat-frozen-2-row').hidden = frozen.length < 2;
     const dashButton = document.getElementById('dash-toggle');
     dashButton.disabled = boots <= 0;
     if (boots <= 0) dashRequested = false;
@@ -981,7 +987,8 @@ document.addEventListener('keydown', async e => {
         // 拾取检测：用移动前的位置 + 方向算出本来要走到的格子，
         // 在旧的 items 列表里查这个格子上是不是有道具
         const landedPos = predictNextPos(human, dirKey);
-        const pickedItem = items.find(
+        const pickedType = (data.pickedItems || [])[0];
+        const pickedItem = items.find(it => it.type === pickedType) || items.find(
             it => it.pos.row === landedPos[0] && it.pos.col === landedPos[1]
         );
 
@@ -1046,8 +1053,8 @@ document.addEventListener('keydown', async e => {
         // ── 道具使用面板（current item / expiration）──
         if (pickedItem) {
             const name = ITEM_DISPLAY_NAME[pickedItem.type] || pickedItem.type;
-            if (pickedItem.type === 'invisibility_cloak' && data.player_invisible_turns != null) {
-                activeEffect = { name, turnsLeft: data.player_invisible_turns };
+            if (pickedItem.type === 'invisibility_cloak') {
+                activeEffect = { name, turnsLeft: latestEffects.human_invisible_turns || 0 };
             } else {
                 activeEffect = { name, turnsLeft: INSTANT_EFFECT_DISPLAY_STEPS };
             }

@@ -227,7 +227,7 @@ Position findSafeTeleportPosition(
     sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
         return a.first > b.first;
     });
-    size_t safestCount = max<size_t>(1, candidates.size() / 10);
+    size_t safestCount = max<size_t>(1, (candidates.size() + 9) / 10);
     return candidates[randomInt(0, static_cast<int>(safestCount) - 1)].second;
 }
 

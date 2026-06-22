@@ -335,7 +335,8 @@ curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
 ```
 
 When Speed Boots is active, request a one-input dash (up to three cells) with
-the optional `dash` boolean. The server ignores dash when boots are inactive:
+the optional `dashRequested` boolean. It defaults to `false`, and the server
+ignores it when boots are inactive:
 
 ```bash
 curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
@@ -345,6 +346,9 @@ curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
 
 Current durations are returned under `effects.speed_boots_turns`,
 `effects.human_invisible_turns`, and `effects.monster_frozen_turns`.
+The same response also exposes `speedBootsTurns`, `invisibleTurns`,
+`dashAvailable`, `monster_states`, `pickedItems`, `items`, `traps`, and a
+per-input `message` for frontend status rendering.
 
 Move in chase mode:
 
