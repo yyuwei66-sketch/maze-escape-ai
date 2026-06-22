@@ -19,7 +19,7 @@ from ai import (
     run_cpp_map_algorithm,
     walls_from_grid,
 )
-from human_predictor import (
+from models.human_predictor import (
     HumanDirectionPredictor,
     build_prediction_features,
     predicted_intercept_target,
