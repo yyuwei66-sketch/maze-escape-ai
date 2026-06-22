@@ -13,7 +13,7 @@ of the path and a wall-aware BFS is retained as a final safety mechanism.
 The maze is treated as a torus. For two cells $a=(a_x,a_y)$ and
 $b=(b_x,b_y)$, their heuristic distance is
 \[
-D_T(a,b)=
+Dist(a,b)=
 \min(|a_x-b_x|,30-|a_x-b_x|)
 +\min(|a_y-b_y|,30-|a_y-b_y|).
 \]
@@ -48,19 +48,16 @@ For a path $P=(p_0,p_1,\ldots,p_{n-1})$, let $h$ be the human position and
 $p_{\mathrm{move}}=p_{\min(2,n-1)}$ be the position reached after the move
 executed in the current turn. The energy minimized by SA is
 \[
-E(P)=|P|+3D_T(p_{\mathrm{move}},h)
-+0.5D_T(p_{n-1},h)+W(P)+R(P).
+E(P)=|P|+3Dist(p_{\mathrm{move}},h)+Wall(P)+R(P).
 \]
 The path-size term favours short routes, while the larger weight on
-$D_T(p_{\mathrm{move}},h)$ makes the immediate action maintain pursuit
-pressure. All structurally accepted candidates end at the human, so the
-endpoint-distance term is normally zero; it is retained as a defensive scoring
-term for any incomplete path that may be introduced by future changes.
+$Dist(p_{\mathrm{move}},h)$ makes the immediate action maintain pursuit
+pressure.
 
 The wall cost distinguishes cells near the executable part of the route from
 those farther in the future:
 \[
-W(P)=\sum_{i=1}^{n-1}
+Wall(P)=\sum_{i=1}^{n-1}
 \begin{cases}
 10000, & p_i\text{ is a wall and }i\leq 6,\\
 100,   & p_i\text{ is a wall and }i>6,\\

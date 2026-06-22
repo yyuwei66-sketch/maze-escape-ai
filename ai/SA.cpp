@@ -19,7 +19,6 @@ constexpr int MAP_SIZE = 30;
 constexpr int MONSTER_MOVE_STEPS = 2;
 constexpr int EARLY_WALL_STEPS = 6;
 constexpr int MAX_PATH_LEN = 140;
-constexpr double END_DISTANCE_WEIGHT = 0.5;
 constexpr double BACKTRACK_PENALTY = 10.0;
 
 struct Point {
@@ -286,7 +285,6 @@ double scorePath(const vector<Point>& path) {
     Point moved = actualMovePoint(path);
     double score = static_cast<double>(path.size());
     score += config.moveDistanceWeight * torusDistance(moved, target);
-    score += END_DISTANCE_WEIGHT * torusDistance(path.back(), target);
     score += wallCost(path);
     if (hasPreviousMove && samePoint(moved, previousMoveFrom)) {
         score += BACKTRACK_PENALTY;
