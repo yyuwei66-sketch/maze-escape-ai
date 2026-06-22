@@ -14,11 +14,13 @@ inline constexpr int WALL = 1;
 // Item Balance Constants
 // ===============================
 
-inline constexpr int SPEED_BOOTS_EXTRA_STEPS = 3;
+inline constexpr int SPEED_BOOTS_DURATION = 5;
+inline constexpr int SPEED_BOOTS_NORMAL_STEPS = 2;
+inline constexpr int SPEED_BOOTS_DASH_STEPS = 3;
 inline constexpr int TELEPORT_SAFE_DISTANCE = 6;
 inline constexpr int FREEZE_TRAP_LIFETIME = 20;
-inline constexpr int FREEZE_TRAP_DURATION = 3;
-inline constexpr int INVISIBILITY_DURATION = 4;
+inline constexpr int FREEZE_TRAP_DURATION = 5;
+inline constexpr int INVISIBILITY_DURATION = 5;
 
 // ===============================
 // Basic Data Structures
@@ -53,7 +55,7 @@ struct Item {
 struct PlayerState {
     Position pos;
     Position spawnPos;
-    int extraSteps;
+    int speedBootsTurns;
     int invisibleTurns;
 };
 
@@ -126,7 +128,9 @@ Position findSafeTeleportPosition(
     const std::vector<std::vector<int>>& grid,
     const PlayerState& player,
     const std::vector<MonsterState>& monsters,
-    int minDistance = TELEPORT_SAFE_DISTANCE
+    int minDistance = TELEPORT_SAFE_DISTANCE,
+    const std::vector<Item>* items = nullptr,
+    const std::vector<Item>* traps = nullptr
 );
 
 // ===============================
@@ -173,7 +177,8 @@ bool applyItemEffect(
     std::vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const std::vector<std::vector<int>>& grid,
-    std::vector<MonsterState>& monsters
+    std::vector<MonsterState>& monsters,
+    const std::vector<Item>* allItems = nullptr
 );
 
 bool checkPlayerItemPickup(
@@ -216,7 +221,8 @@ MoveResult movePlayerWithItemCheck(
     std::vector<Item>& items,
     std::vector<Item>& traps,
     bool& cloakAlreadySpawned,
-    std::vector<MonsterState>& monsters
+    std::vector<MonsterState>& monsters,
+    bool dashRequested = false
 );
 
 bool checkGameOver(

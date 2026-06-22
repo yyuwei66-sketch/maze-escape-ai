@@ -269,7 +269,7 @@ class FlaskGameTest(unittest.TestCase):
         self.assertIn(data["items"][0]["type"], main.ITEM_KINDS)
         self.assertIn("effects", data)
 
-    def test_speed_boots_grant_three_extra_direction_inputs(self):
+    def test_speed_boots_enable_two_cell_moves_and_three_cell_dash(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
             spawns=((0, 0), (0, 10)),
@@ -277,6 +277,7 @@ class FlaskGameTest(unittest.TestCase):
         game_id = response.get_json()["game_id"]
         game = main.games[game_id]
         game.items = [main.ItemState(type="speed_boots", pos=(1, 0))]
+        game.monster_frozen_turns = [99]
 
         move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
 
@@ -284,24 +285,22 @@ class FlaskGameTest(unittest.TestCase):
         data = move.get_json()
         self.assertEqual(data["human"], {"row": 1, "col": 0})
         self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 10}])
-        self.assertEqual(data["effects"]["human_extra_steps"], 3)
+        self.assertEqual(data["effects"]["speed_boots_turns"], 5)
         self.assertEqual(data["items"], [])
 
         second = self.client.post(
             f"/api/games/{game_id}/move", json={"direction": "right"}
         ).get_json()
-        self.assertEqual(second["human"], {"row": 1, "col": 1})
-        self.assertEqual(second["effects"]["human_extra_steps"], 2)
+        self.assertEqual(second["human"], {"row": 1, "col": 2})
+        self.assertEqual(second["effects"]["speed_boots_turns"], 4)
         self.assertMonsterPositions(second["monsters"], [{"row": 0, "col": 10}])
 
-        self.client.post(
-            f"/api/games/{game_id}/move", json={"direction": "down"}
-        )
-        fourth = self.client.post(
-            f"/api/games/{game_id}/move", json={"direction": "left"}
+        dashed = self.client.post(
+            f"/api/games/{game_id}/move",
+            json={"direction": "down", "dashRequested": True},
         ).get_json()
-        self.assertEqual(fourth["effects"]["human_extra_steps"], 0)
-        self.assertMonsterPositions(fourth["monsters"], [{"row": 0, "col": 8}])
+        self.assertEqual(dashed["human"], {"row": 4, "col": 2})
+        self.assertEqual(dashed["effects"]["speed_boots_turns"], 3)
 
     def test_home_stone_teleports_to_a_safe_cell_and_ends_bonus_movement(self):
         response = self.make_game(
@@ -373,7 +372,7 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(data["items"], [])
         self.assertEqual(data["traps"], [])
 
-    def test_invisibility_cloak_prevents_monster_move_for_turn(self):
+    def test_invisibility_cloak_makes_monster_move_randomly_without_capture(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar", "item_count": 0},
             spawns=((0, 0), (0, 5)),
@@ -382,11 +381,14 @@ class FlaskGameTest(unittest.TestCase):
         game = main.games[game_id]
         game.items = [main.ItemState(type="invisibility_cloak", pos=(1, 0))]
 
-        move = self.client.post(f"/api/games/{game_id}/move", json={"direction": "down"})
+        with patch("main.random.choice", side_effect=lambda cells: cells[0]):
+            move = self.client.post(
+                f"/api/games/{game_id}/move", json={"direction": "down"}
+            )
 
         self.assertEqual(move.status_code, 200)
         data = move.get_json()
-        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 5}])
+        self.assertMonsterPositions(data["monsters"], [{"row": 28, "col": 5}])
         self.assertEqual(
             data["effects"]["human_invisible_turns"],
             main.INVISIBILITY_DURATION,

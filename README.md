@@ -334,6 +334,18 @@ curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
   -d '{"direction":"up"}'
 ```
 
+When Speed Boots is active, request a one-input dash (up to three cells) with
+the optional `dash` boolean. The server ignores dash when boots are inactive:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"right","dashRequested":true}'
+```
+
+Current durations are returned under `effects.speed_boots_turns`,
+`effects.human_invisible_turns`, and `effects.monster_frozen_turns`.
+
 Move in chase mode:
 
 ```bash

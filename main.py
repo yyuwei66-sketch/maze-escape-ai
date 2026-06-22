@@ -56,11 +56,13 @@ ITEM_SYMBOLS = {
 }
 ITEM_SPAWN_COUNT = 2
 ITEM_SPAWN_INTERVAL = 10
-SPEED_BOOTS_EXTRA_STEPS = 3
+SPEED_BOOTS_DURATION = 5
+SPEED_BOOTS_NORMAL_STEPS = 2
+SPEED_BOOTS_DASH_STEPS = 3
 TELEPORT_SAFE_DISTANCE = 6
 FREEZE_TRAP_LIFETIME = 20
-FREEZE_TRAP_DURATION = 3
-INVISIBILITY_DURATION = 4
+FREEZE_TRAP_DURATION = 5
+INVISIBILITY_DURATION = 5
 
 app = Flask(__name__)
 try:
@@ -106,7 +108,7 @@ class GameState:
     items: List[ItemState] = field(default_factory=list)
     traps: List[ItemState] = field(default_factory=list)
     cloak_already_spawned: bool = False
-    human_extra_steps: int = 0
+    human_speed_boots_turns: int = 0
     human_invisible_turns: int = 0
     monster_frozen_turns: List[int] = field(default_factory=list)
     last_monster_paths: List[List[Pos]] = field(default_factory=list)
@@ -142,7 +144,8 @@ class GameState:
             "traps": [trap.serialize() for trap in self.traps if trap.active],
             "effects": {
                 "human_invisible_turns": self.human_invisible_turns,
-                "human_extra_steps": self.human_extra_steps,
+                "speed_boots_turns": self.human_speed_boots_turns,
+                "human_extra_steps": self.human_speed_boots_turns,
                 "monster_frozen_turns": list(self.monster_frozen_turns),
             },
             "mode": self.mode,
@@ -183,13 +186,24 @@ def move_one(grid: Sequence[Sequence[int]], pos: Pos, direction: str) -> Pos:
     return nxt
 
 
+def walkable_neighbors(grid: Sequence[Sequence[int]], pos: Pos) -> List[Pos]:
+    neighbors: List[Pos] = []
+    for dr, dc in VALID_DIRECTIONS.values():
+        nxt = wrap_pos((pos[0] + dr, pos[1] + dc), grid)
+        if is_floor(grid, nxt):
+            neighbors.append(nxt)
+    return neighbors
+
+
 def assert_running(game: GameState) -> None:
     if game.status != "running":
         raise ValueError("game has already ended")
 
 
 def update_status(game: GameState) -> None:
-    if any(monster == game.human for monster in game.monsters):
+    if game.human_invisible_turns <= 0 and any(
+        monster == game.human for monster in game.monsters
+    ):
         game.status = "ended"
         game.message = f"caught after {game.step_count} turns"
 
@@ -392,31 +406,22 @@ def find_safe_teleport_position(
     min_distance: int = TELEPORT_SAFE_DISTANCE,
 ) -> Pos:
     distances = distance_field(game.grid, game.monsters)
+    occupied = set(game.monsters)
+    occupied.update(item.pos for item in game.items if item.active)
+    occupied.update(trap.pos for trap in game.traps if trap.active)
     candidates = [
-        (row, col)
+        (distances[row][col] if distances[row][col] is not None else float("inf"), (row, col))
         for row, cells in enumerate(game.grid)
         for col, value in enumerate(cells)
         if int(value) == 0
         and (row, col) != game.human
-        and distances[row][col] is not None
-        and distances[row][col] >= min_distance
+        and (row, col) not in occupied
     ]
-    if candidates:
-        return random.choice(candidates)
-
-    fallback = [
-        (distances[row][col], (row, col))
-        for row, cells in enumerate(game.grid)
-        for col, value in enumerate(cells)
-        if int(value) == 0
-        and (row, col) != game.human
-        and distances[row][col] is not None
-    ]
-    return max(
-        fallback,
-        default=(None, game.human),
-        key=lambda entry: entry[0] or -1,
-    )[1]
+    if not candidates:
+        return game.human
+    candidates.sort(key=lambda entry: entry[0], reverse=True)
+    safest_count = max(1, len(candidates) // 10)
+    return random.choice([pos for _, pos in candidates[:safest_count]])
 
 
 def random_item_type(cloak_already_spawned: bool) -> ItemKind:
@@ -485,32 +490,39 @@ def update_trap_lifetimes(game: GameState) -> None:
                 trap.active = False
 
 
-def decay_effects_after_human_step(game: GameState) -> None:
+def decay_effects_after_human_step(
+    game: GameState, newly_applied: set[ItemKind] | None = None
+) -> None:
+    newly_applied = newly_applied or set()
     update_trap_lifetimes(game)
-    if game.human_invisible_turns > 0:
+    if "speed_boots" not in newly_applied and game.human_speed_boots_turns > 0:
+        game.human_speed_boots_turns -= 1
+    if "invisibility_cloak" not in newly_applied and game.human_invisible_turns > 0:
         game.human_invisible_turns -= 1
-    game.monster_frozen_turns = [
-        max(0, frozen - 1) for frozen in game.monster_frozen_turns
-    ]
+    if "freeze_trap" not in newly_applied:
+        game.monster_frozen_turns = [
+            max(0, frozen - 1) for frozen in game.monster_frozen_turns
+        ]
 
 
 def apply_item_effect(game: GameState, item: ItemState) -> bool:
     """Apply a picked-up item. Return True when movement should stop."""
 
     if item.type == "speed_boots":
-        game.human_extra_steps += SPEED_BOOTS_EXTRA_STEPS
+        game.human_speed_boots_turns = SPEED_BOOTS_DURATION
         item.active = False
         return False
     if item.type == "home_stone":
         game.human = find_safe_teleport_position(game)
-        game.human_extra_steps = 0
         item.active = False
         return True
     if item.type == "freeze_trap":
         while len(game.monster_frozen_turns) < len(game.monsters):
             game.monster_frozen_turns.append(0)
         for index in range(len(game.monsters)):
-            game.monster_frozen_turns[index] = FREEZE_TRAP_DURATION
+            game.monster_frozen_turns[index] = max(
+                game.monster_frozen_turns[index], FREEZE_TRAP_DURATION
+            )
         item.active = False
         return False
     if item.type == "invisibility_cloak":
@@ -521,23 +533,40 @@ def apply_item_effect(game: GameState, item: ItemState) -> bool:
     return False
 
 
-def check_player_item_pickup(game: GameState) -> bool:
+def check_player_item_pickup(game: GameState) -> tuple[bool, ItemKind | None]:
     for item in game.items:
         if item.active and item.pos == game.human:
-            return apply_item_effect(game, item)
-    return False
+            return apply_item_effect(game, item), item.type
+    return False, None
 
 
-def move_human_with_items(game: GameState, direction: str) -> bool:
-    using_extra_step = game.human_extra_steps > 0
-    game.human = move_one(game.grid, game.human, direction)
-    if using_extra_step:
-        game.human_extra_steps -= 1
+def move_human_with_items(game: GameState, direction: str, dash_requested: bool = False) -> bool:
+    if direction not in VALID_DIRECTIONS:
+        raise ValueError(f"invalid direction: {direction}")
+    max_steps = 1
+    if game.human_speed_boots_turns > 0:
+        max_steps = SPEED_BOOTS_DASH_STEPS if dash_requested else SPEED_BOOTS_NORMAL_STEPS
+    dr, dc = VALID_DIRECTIONS[direction]
+    moved = False
+    stop_movement = False
+    newly_applied: set[ItemKind] = set()
+    for _ in range(max_steps):
+        nxt = wrap_pos((game.human[0] + dr, game.human[1] + dc), game.grid)
+        if not is_floor(game.grid, nxt):
+            break
+        game.human = nxt
+        moved = True
+        if catches_human(game):
+            break
+        stop_movement, picked_type = check_player_item_pickup(game)
+        if picked_type:
+            newly_applied.add(picked_type)
+        if stop_movement:
+            break
+    if not moved:
+        raise ValueError("move would hit a wall")
 
-    decay_effects_after_human_step(game)
-    stop_movement = check_player_item_pickup(game)
-    if stop_movement:
-        game.human_extra_steps = 0
+    decay_effects_after_human_step(game, newly_applied)
     game.human_direction_history.append(direction)
     if len(game.human_direction_history) > 10:
         game.human_direction_history = game.human_direction_history[-10:]
@@ -548,11 +577,11 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
     assert_running(game)
     if game.mode == "escape":
         direction = str(payload.get("direction", "")).lower()
-        movement_ended = move_human_with_items(game, direction)
-        if (
-            not catches_human(game)
-            and (movement_ended or game.human_extra_steps == 0)
-        ):
+        dash_requested = (
+            payload.get("dashRequested", payload.get("dash", False)) is True
+        )
+        move_human_with_items(game, direction, dash_requested)
+        if not catches_human(game):
             game.monsters = move_monsters_with_item_effects(game)
     else:
         direction = str(payload.get("direction", "")).lower()
@@ -575,13 +604,17 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
 
 
 def catches_human(game: GameState) -> bool:
+    if game.human_invisible_turns > 0:
+        return False
     return any(monster == game.human for monster in game.monsters)
 
 
 def check_monster_trap(game: GameState, monster_index: int) -> bool:
     for trap in game.traps:
         if trap.active and trap.pos == game.monsters[monster_index]:
-            game.monster_frozen_turns[monster_index] = FREEZE_TRAP_DURATION
+            game.monster_frozen_turns[monster_index] = max(
+                game.monster_frozen_turns[monster_index], FREEZE_TRAP_DURATION
+            )
             trap.active = False
             return True
     return False
@@ -597,8 +630,24 @@ def move_monsters_with_item_effects(game: GameState) -> List[Pos]:
         game.monster_frozen_turns.append(0)
 
     if game.human_invisible_turns > 0:
-        game.last_monster_paths = [[pos] for pos in game.monsters]
-        return list(game.monsters)
+        next_monsters = list(game.monsters)
+        actual_paths: List[List[Pos]] = [[pos] for pos in game.monsters]
+        for index, start in enumerate(game.monsters):
+            if game.monster_frozen_turns[index] > 0:
+                continue
+            for _ in range(2):
+                neighbors = walkable_neighbors(game.grid, next_monsters[index])
+                alternatives = [pos for pos in neighbors if pos != game.human]
+                choices = alternatives or neighbors
+                if not choices:
+                    break
+                next_monsters[index] = random.choice(choices)
+                game.monsters[index] = next_monsters[index]
+                actual_paths[index].append(next_monsters[index])
+                if check_monster_trap(game, index):
+                    break
+        game.last_monster_paths = actual_paths
+        return next_monsters
 
     if all(
         frozen > 0
@@ -1126,6 +1175,7 @@ INDEX_HTML = """<!doctype html>
         <button class="secondary" data-dir="down">Down</button>
         <button class="secondary" data-dir="right">Right</button>
       </div>
+      <button id="dash" class="secondary" disabled>Dash OFF</button>
       <p id="meta" class="meta">No game running.</p>
     </aside>
     <section>
@@ -1134,6 +1184,7 @@ INDEX_HTML = """<!doctype html>
   </main>
   <script>
     let game = null;
+    let dashRequested = false;
     const board = document.getElementById("board");
     const meta = document.getElementById("meta");
 
@@ -1166,8 +1217,9 @@ INDEX_HTML = """<!doctype html>
       const response = await fetch(`/api/games/${game.game_id}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction })
+        body: JSON.stringify({ direction, dashRequested })
       });
+      dashRequested = false;
       const payload = await response.json();
       if (!response.ok) {
         meta.textContent = payload.error || "Move failed";
@@ -1215,13 +1267,24 @@ INDEX_HTML = """<!doctype html>
         ? ` | monster step: ${game.pending_monster_steps}/2`
         : "";
       const bonus = game.effects?.human_extra_steps > 0
-        ? ` | speed steps: ${game.effects.human_extra_steps}`
+        ? ` | boots: ${game.effects.speed_boots_turns}`
         : "";
-      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count}${pending}${bonus} | ${game.status}${game.message ? " | " + game.message : ""}`;
+      const invisible = ` | invisible: ${game.effects?.human_invisible_turns || 0}`;
+      const frozen = ` | frozen: ${(game.effects?.monster_frozen_turns || []).join(", ")}`;
+      const dash = document.getElementById("dash");
+      dash.disabled = game.mode !== "escape" || (game.effects?.speed_boots_turns || 0) <= 0;
+      if (dash.disabled) dashRequested = false;
+      dash.textContent = dashRequested ? "Dash ON" : "Dash OFF";
+      meta.textContent = `${game.mode} | ${game.opponent_ai} | turns: ${game.step_count}${pending}${bonus}${invisible}${frozen} | ${game.status}${game.message ? " | " + game.message : ""}`;
     }
 
     document.getElementById("start-escape").addEventListener("click", () => startGame("escape"));
     document.getElementById("start-chase").addEventListener("click", () => startGame("chase"));
+    document.getElementById("dash").addEventListener("click", () => {
+      if (!game || (game.effects?.speed_boots_turns || 0) <= 0) return;
+      dashRequested = !dashRequested;
+      render();
+    });
     document.querySelectorAll("[data-dir]").forEach(button => {
       button.addEventListener("click", () => move(button.dataset.dir));
     });

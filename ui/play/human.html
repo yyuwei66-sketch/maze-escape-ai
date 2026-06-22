@@ -347,6 +347,19 @@ canvas{
                         <span class="label">Invalid object:</span>
                         <span class="value text-red" id="stat-invalid">none</span>
                     </div>
+                    <div class="info-row">
+                        <span class="label">Speed Boots:</span>
+                        <span class="value text-yellow" id="stat-speed-boots">0</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Invisible:</span>
+                        <span class="value text-yellow" id="stat-invisible">0</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Monsters frozen:</span>
+                        <span class="value text-blue" id="stat-frozen">0</span>
+                    </div>
+                    <button id="dash-toggle" type="button" disabled>Dash OFF</button>
                 </div>
             </div>
         </div>
@@ -598,6 +611,16 @@ function updateItemPanel() {
         activeEffect.turnsLeft === null ? '—' : activeEffect.turnsLeft;
     document.getElementById('stat-next-refresh').textContent = nextRefreshCountdown;
     document.getElementById('stat-invalid').textContent = invalidObjectLabel;
+    const effects = latestEffects || {};
+    const boots = effects.speed_boots_turns || 0;
+    document.getElementById('stat-speed-boots').textContent = boots;
+    document.getElementById('stat-invisible').textContent = effects.human_invisible_turns || 0;
+    document.getElementById('stat-frozen').textContent =
+        (effects.monster_frozen_turns || []).map((turns, i) => `M${i + 1}: ${turns}`).join(', ') || '0';
+    const dashButton = document.getElementById('dash-toggle');
+    dashButton.disabled = boots <= 0;
+    if (boots <= 0) dashRequested = false;
+    dashButton.textContent = dashRequested ? 'Dash ON' : 'Dash OFF';
 }
 
 
@@ -882,6 +905,14 @@ let lastMoveTime = 0;
 // ── 道具面板状态 ──
 let activeEffect = { name: 'none', turnsLeft: null }; // 当前生效道具
 let invalidObjectLabel = 'none';  // 异常道具提示
+let latestEffects = {};
+let dashRequested = false;
+
+document.getElementById('dash-toggle').addEventListener('click', () => {
+    if ((latestEffects.speed_boots_turns || 0) <= 0) return;
+    dashRequested = !dashRequested;
+    updateItemPanel();
+});
 
 const ITEM_DISPLAY_NAME = {
     speed_boots: 'Speed Boots',
@@ -926,8 +957,10 @@ document.addEventListener('keydown', async e => {
         const res = await fetch(`/api/games/${gameId}/move`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ direction: dirKey })
+            body: JSON.stringify({ direction: dirKey, dashRequested })
         });
+
+        dashRequested = false;
 
         const data = await res.json();
 
@@ -985,6 +1018,7 @@ document.addEventListener('keydown', async e => {
 
         items = data.items || [];
         traps = data.traps || [];
+        latestEffects = data.effects || {};
 
         // ════════════════════════════════════════
         // 累计步数：只增不减，跟下面的刷新倒计时完全独立
@@ -1103,6 +1137,7 @@ async function init() {
     monsterTarget = [...monster];
     items = game.items || [];
     traps = game.traps || [];
+    latestEffects = game.effects || {};
 
     // 累计步数：新开一局清零
     humanSteps = 0;

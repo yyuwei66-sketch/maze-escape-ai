@@ -195,7 +195,9 @@ Position findSafeTeleportPosition(
     const vector<vector<int>>& grid,
     const PlayerState& player,
     const vector<MonsterState>& monsters,
-    int minDistance
+    int /*minDistance*/,
+    const vector<Item>* items,
+    const vector<Item>* traps
 ) {
     int rows = (int)grid.size();
     int cols = (int)grid[0].size();
@@ -206,43 +208,27 @@ Position findSafeTeleportPosition(
     }
     vector<vector<int>> hazardField = computeDistanceField(grid, monsterPositions);
 
-    // Fast random search
-    for (int attempt = 0; attempt < 500; attempt++) {
-        Position candidate;
-        candidate.row = randomInt(0, rows - 1);
-        candidate.col = randomInt(0, cols - 1);
-        candidate = wrapPosition(candidate, grid);
-
-        if (!isWalkable(grid, candidate) || samePosition(candidate, player.pos)) {
-            continue;
-        }
-
-        if (hazardField[candidate.row][candidate.col] >= minDistance) {
-            return candidate;
-        }
-    }
-
-    // Full-map fallback searching for global maximum distance
-    Position bestPos = player.pos;
-    int bestSafeDistance = -1;
+    vector<pair<int, Position>> candidates;
 
     for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
             Position candidate = {r, c};
 
-            if (!isWalkable(grid, candidate) || samePosition(candidate, player.pos)) {
+            if (!isWalkable(grid, candidate) || samePosition(candidate, player.pos)
+                || isMonsterHere(candidate, monsters)
+                || (items != nullptr && isItemHere(candidate, *items))
+                || (traps != nullptr && isItemHere(candidate, *traps))) {
                 continue;
             }
-
-            int currentSafeDist = hazardField[r][c];
-            if (currentSafeDist != numeric_limits<int>::max() && currentSafeDist > bestSafeDistance) {
-                bestSafeDistance = currentSafeDist;
-                bestPos = candidate;
-            }
+            candidates.push_back({hazardField[r][c], candidate});
         }
     }
-
-    return bestPos;
+    if (candidates.empty()) return player.pos;
+    sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
+        return a.first > b.first;
+    });
+    size_t safestCount = max<size_t>(1, candidates.size() / 10);
+    return candidates[randomInt(0, static_cast<int>(safestCount) - 1)].second;
 }
 
 
@@ -341,6 +327,10 @@ void decayStatesAfterSuccessfulPlayerStep(
 ) {
     updateTrapLifetimeByStep(traps);
 
+    if (player.speedBootsTurns > 0) {
+        player.speedBootsTurns--;
+    }
+
     if (player.invisibleTurns > 0) {
         player.invisibleTurns--;
     }
@@ -352,27 +342,52 @@ void decayStatesAfterSuccessfulPlayerStep(
     }
 }
 
+static void finishSuccessfulPlayerInput(
+    PlayerState& player,
+    vector<MonsterState>& monsters,
+    vector<Item>& traps,
+    bool pickedBoots,
+    bool pickedCloak,
+    bool pickedFreeze
+) {
+    updateTrapLifetimeByStep(traps);
+
+    if (!pickedBoots && player.speedBootsTurns > 0) {
+        player.speedBootsTurns--;
+    }
+    if (!pickedCloak && player.invisibleTurns > 0) {
+        player.invisibleTurns--;
+    }
+    if (!pickedFreeze) {
+        for (MonsterState& monster : monsters) {
+            if (monster.frozenTurns > 0) {
+                monster.frozenTurns--;
+            }
+        }
+    }
+}
+
 bool applyItemEffect(
     Item& item,
     PlayerState& player,
     vector<Item>& traps,
     bool& cloakAlreadySpawned,
     const vector<vector<int>>& grid,
-    vector<MonsterState>& monsters
+    vector<MonsterState>& monsters,
+    const vector<Item>* allItems
 ) {
     if (item.type == SPEED_BOOTS) {
-        player.extraSteps += SPEED_BOOTS_EXTRA_STEPS;
-        cout << "[Effect] Speed Boots triggered: " << SPEED_BOOTS_EXTRA_STEPS 
-             << " extra movement inputs granted." << endl;
+        player.speedBootsTurns = SPEED_BOOTS_DURATION;
+        cout << "[Effect] Speed Boots active for " << SPEED_BOOTS_DURATION
+             << " movement inputs." << endl;
         item.active = false;
         return false;
     }
     else if (item.type == HOME_STONE) {
         Position newPos = findSafeTeleportPosition(
-            grid, player, monsters, TELEPORT_SAFE_DISTANCE
+            grid, player, monsters, TELEPORT_SAFE_DISTANCE, allItems, &traps
         );
         player.pos = newPos;
-        player.extraSteps = 0;
         cout << "[Effect] Safe Teleport Stone triggered: Player teleported to safe position ("
              << player.pos.row << ", " << player.pos.col << "). Movement phase aborted." << endl;
         item.active = false;
@@ -380,7 +395,10 @@ bool applyItemEffect(
     }
     else if (item.type == FREEZE_TRAP) {
         for (MonsterState& monster : monsters) {
-            monster.frozenTurns = FREEZE_TRAP_DURATION;
+            monster.frozenTurns = max(
+                monster.frozenTurns,
+                FREEZE_TRAP_DURATION
+            );
         }
         cout << "[Effect] Freeze Trap triggered: Monsters frozen for "
              << FREEZE_TRAP_DURATION << " player steps." << endl;
@@ -409,7 +427,7 @@ bool checkPlayerItemPickup(
     for (Item& item : items) {
         if (item.active && samePosition(player.pos, item.pos)) {
             return applyItemEffect(
-                item, player, traps, cloakAlreadySpawned, grid, monsters
+                item, player, traps, cloakAlreadySpawned, grid, monsters, &items
             );
         }
     }
@@ -420,7 +438,10 @@ void checkMonsterTrap(vector<MonsterState>& monsters, vector<Item>& traps) {
     for (int i = 0; i < (int)monsters.size(); i++) {
         for (Item& trap : traps) {
             if (trap.active && samePosition(monsters[i].pos, trap.pos)) {
-                monsters[i].frozenTurns = FREEZE_TRAP_DURATION;
+                monsters[i].frozenTurns = max(
+                    monsters[i].frozenTurns,
+                    FREEZE_TRAP_DURATION
+                );
                 trap.active = false;
                 cout << "[Combat] Monster " << i + 1 
                      << " stepped on Freeze Trap! Frozen for "
@@ -463,20 +484,36 @@ bool moveMonsters(
     const vector<vector<int>>& grid,
     vector<Item>& traps
 ) {
-    if (player.invisibleTurns > 0) {
-        return false;
-    }
+    const bool invisible = player.invisibleTurns > 0;
 
-    vector<Position> playerPosList = {player.pos};
-    vector<vector<int>> playerDistField = computeDistanceField(grid, playerPosList);
+    vector<vector<int>> playerDistField;
+    if (!invisible) {
+        vector<Position> playerPosList = {player.pos};
+        playerDistField = computeDistanceField(grid, playerPosList);
+    }
 
     for (int i = 0; i < (int)monsters.size(); i++) {
         for (int step = 0; step < 2; step++) {
-            
-            moveMonsterOneStepGreedy(monsters[i], grid, playerDistField);
+
+            if (monsters[i].frozenTurns > 0) {
+                break;
+            }
+            else if (invisible) {
+                vector<Position> neighbors = getWalkableNeighbors(monsters[i].pos, grid);
+                vector<Position> preferred;
+                for (Position pos : neighbors) {
+                    if (!samePosition(pos, player.pos)) preferred.push_back(pos);
+                }
+                const vector<Position>& choices = preferred.empty() ? neighbors : preferred;
+                if (!choices.empty()) {
+                    monsters[i].pos = choices[randomInt(0, static_cast<int>(choices.size()) - 1)];
+                }
+            } else {
+                moveMonsterOneStepGreedy(monsters[i], grid, playerDistField);
+            }
             checkMonsterTrap(monsters, traps);
 
-            if (samePosition(monsters[i].pos, player.pos)) {
+            if (!invisible && samePosition(monsters[i].pos, player.pos)) {
                 cout << "[Game Over] Monster " << i + 1 
                      << " caught the player during chase." << endl;
                 return true;
@@ -518,21 +555,53 @@ MoveResult movePlayerWithItemCheck(
     vector<Item>& items,
     vector<Item>& traps,
     bool& cloakAlreadySpawned,
-    vector<MonsterState>& monsters
+    vector<MonsterState>& monsters,
+    bool dashRequested
 ) {
-    bool moved = movePlayerOneStep(player, dr, dc, grid);
+    const int maxSteps = player.speedBootsTurns <= 0 ? 1
+        : (dashRequested ? SPEED_BOOTS_DASH_STEPS : SPEED_BOOTS_NORMAL_STEPS);
+    bool moved = false;
+    bool pickedBoots = false;
+    bool pickedCloak = false;
+    bool pickedFreeze = false;
 
+    for (int step = 0; step < maxSteps; ++step) {
+        if (!movePlayerOneStep(player, dr, dc, grid)) break;
+        moved = true;
+        if (checkGameOver(player, monsters)) return MOVE_CAUGHT;
+
+        for (Item& item : items) {
+            if (!item.active || !samePosition(player.pos, item.pos)) continue;
+            pickedBoots = pickedBoots || item.type == SPEED_BOOTS;
+            pickedCloak = pickedCloak || item.type == INVISIBILITY_CLOAK;
+            pickedFreeze = pickedFreeze || item.type == FREEZE_TRAP;
+            bool stopMovement = applyItemEffect(
+                item, player, traps, cloakAlreadySpawned, grid, monsters, &items
+            );
+            if (stopMovement) {
+                finishSuccessfulPlayerInput(
+                    player,
+                    monsters,
+                    traps,
+                    pickedBoots,
+                    pickedCloak,
+                    pickedFreeze
+                );
+                return MOVE_END_PHASE;
+            }
+            break;
+        }
+    }
     if (!moved) return MOVE_BLOCKED;
-    if (checkGameOver(player, monsters)) return MOVE_CAUGHT;
 
-    decayStatesAfterSuccessfulPlayerStep(player, monsters, traps);
-
-    bool stopMovement = checkPlayerItemPickup(
-        player, items, traps, cloakAlreadySpawned, grid, monsters
+    finishSuccessfulPlayerInput(
+        player,
+        monsters,
+        traps,
+        pickedBoots,
+        pickedCloak,
+        pickedFreeze
     );
-
-    if (checkGameOver(player, monsters)) return MOVE_CAUGHT;
-    if (stopMovement) return MOVE_END_PHASE;
 
     return MOVE_CONTINUE;
 }
@@ -541,6 +610,7 @@ bool checkGameOver(
     const PlayerState& player,
     const vector<MonsterState>& monsters
 ) {
+    if (player.invisibleTurns > 0) return false;
     for (const MonsterState& monster : monsters) {
         if (samePosition(player.pos, monster.pos)) {
             return true;
