@@ -19,6 +19,7 @@ env/
 
 # Project-generated files
 map/generated_map.txt
+eval_charts*/
 ai/SA
 ai/bfs_escape
 ai/genetic_map
