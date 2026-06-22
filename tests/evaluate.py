@@ -14,7 +14,7 @@ Usage:
 """
 from __future__ import annotations
 
-import argparse, os, sys, time, random
+import argparse, csv, json, os, sys, time, random
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -243,6 +243,8 @@ def evaluate(name: str, fn, maps: List[Tuple]) -> Dict[str, Any]:
     ta = np.array([t*1000 for r in results for t in r.step_times] or [0.0])
     return {
         "name": name,
+        "games": len(results),
+        "caught_count": int(sum(r.caught for r in results)),
         "steps_mean":    float(np.mean(sa)) if sa.size else float("nan"),
         "steps_median":  float(np.median(sa)) if sa.size else float("nan"),
         "steps_std":     float(np.std(sa)) if sa.size else float("nan"),
@@ -299,7 +301,7 @@ def _save(fig, path):
 
 def chart1_steps_bar(stats, out):
     fig, ax = _new_fig()
-    fig.suptitle("Avg Steps to Catch Player",
+    fig.suptitle("Avg Steps to Catch Player (Captured Games Only)",
                  fontsize=15, fontweight="bold", color=TXT_DK, y=0.98)
     names  = [s["name"] for s in stats]
     means  = [s["steps_mean"] for s in stats]
@@ -322,7 +324,7 @@ def chart1_steps_bar(stats, out):
 
 def chart2_steps_box(stats, out):
     fig, ax = _new_fig()
-    fig.suptitle("Steps Distribution (Box Plot)",
+    fig.suptitle("Steps Distribution (Captured Games Only)",
                  fontsize=15, fontweight="bold", color=TXT_DK, y=0.98)
     names  = [s["name"] for s in stats]
     data   = [s["steps_all"] for s in stats]
@@ -371,19 +373,16 @@ def chart4_time_bar(stats, out):
                  fontsize=15, fontweight="bold", color=TXT_DK, y=0.98)
     names  = [s["name"] for s in stats]
     tmeans = [s["time_mean_ms"] for s in stats]
-    tstds  = [s["time_std_ms"]  for s in stats]
     colors = [COLORS[n] for n in names]
     x = np.arange(len(names))
-    bars = ax.bar(x, tmeans, color=colors, width=0.48, zorder=3,
-                  yerr=tstds, capsize=7,
-                  error_kw={"ecolor":TXT_MU,"lw":1.5,"capthick":1.5})
-    for bar, v, sd in zip(bars, tmeans, tstds):
+    bars = ax.bar(x, tmeans, color=colors, width=0.48, zorder=3)
+    for bar, v in zip(bars, tmeans):
         ax.text(bar.get_x()+bar.get_width()/2,
-                v+sd+max(v*0.04, 0.003),
+                v+max(max(tmeans)*0.025, 0.003),
                 f"{v:.3f}", ha="center", va="bottom",
                 fontsize=10.5, fontweight="bold", color=TXT_DK)
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=12, color=TXT_DK)
-    ax.text(0.98, 0.97, "Lower = faster",
+    ax.text(0.78, 0.97, "Lower = faster",
             transform=ax.transAxes, ha="right", va="top",
             fontsize=9.5, color=TXT_MU, style="italic")
     _style(ax, ylabel="Time (ms)")
@@ -414,25 +413,24 @@ def chart5_time_box(stats, out):
 
 def chart6_overview(stats, out):
     fig, ax = _new_fig(w=8, h=6)
-    fig.suptitle("Performance Overview  ·  Steps vs Decision Time",
+    fig.suptitle("Performance Overview  ·  Captured Games Only",
                  fontsize=15, fontweight="bold", color=TXT_DK, y=0.98)
+    label_offsets = {"A*": (10, -12), "Greedy": (10, -2), "Minimax": (10, 6), "SA": (-42, 4)}
     for s in stats:
         c = COLORS[s["stone"]] if "stone" in s else COLORS[s["name"]]
         ax.scatter(s["steps_mean"], s["time_mean_ms"],
                    s=240, color=c, zorder=5,
                    edgecolors="white", linewidths=2.2)
-        ax.errorbar(s["steps_mean"], s["time_mean_ms"],
-                    xerr=s["steps_std"], yerr=s["time_std_ms"],
-                    fmt="none", ecolor=c, alpha=0.35, lw=1.6, capsize=5)
         ax.annotate(s["name"],
                     (s["steps_mean"], s["time_mean_ms"]),
-                    textcoords="offset points", xytext=(10, 5),
+                    textcoords="offset points", xytext=label_offsets[s["name"]],
                     fontsize=12, fontweight="bold", color=c)
+    ax.set_yscale("log")
     _style(ax,
            xlabel="Avg Steps to Catch  (lower = stronger AI)",
            ylabel="Avg Decision Time (ms)  (lower = faster)")
     ax.xaxis.grid(True, color=GRID_C, lw=0.9, zorder=0)
-    ax.text(0.03, 0.05,
+    ax.text(0.52, 0.05,
             "Ideal: bottom-left\n(strongest & fastest)",
             transform=ax.transAxes, fontsize=9, color=TXT_MU, va="bottom",
             bbox=dict(boxstyle="round,pad=0.35",
@@ -443,27 +441,59 @@ def chart6_overview(stats, out):
 # Text report
 # ════════════════════════════════════════════════════════════════════════════
 
-def print_report(stats):
+def format_report(stats) -> str:
     SEP = "=" * 74
-    print(f"\n{SEP}")
-    print(f"  Algorithm Evaluation Report")
-    print(SEP)
-    print(f"  {'Algo':<10} {'AvgSteps':>9} {'Median':>8} {'Std':>7}"
-          f"  {'Catch%':>7}  {'AvgTime(ms)':>12}  {'MedTime(ms)':>12}")
-    print("-"*74)
+    lines = [
+        SEP,
+        "  Algorithm Evaluation Report",
+        "  Step statistics include captured games only.",
+        SEP,
+        (f"  {'Algo':<10} {'Caught':>8} {'AvgSteps':>9} {'Median':>8} {'Std':>7}"
+         f"  {'Catch%':>7}  {'AvgTime(ms)':>12}  {'MedTime(ms)':>12}"),
+        "-" * 84,
+    ]
     for s in stats:
-        print(f"  {s['name']:<10}"
-              f" {s['steps_mean']:>9.1f}"
-              f" {s['steps_median']:>8.1f}"
-              f" {s['steps_std']:>7.1f}"
-              f"  {s['caught_rate']*100:>6.1f}%"
-              f"  {s['time_mean_ms']:>12.4f}"
-              f"  {s['time_median_ms']:>12.4f}")
-    print(SEP)
-    bs = min(stats, key=lambda s: s["steps_mean"])
+        lines.append(
+            f"  {s['name']:<10}"
+            f" {s['caught_count']:>3}/{s['games']:<4}"
+            f" {s['steps_mean']:>9.1f}"
+            f" {s['steps_median']:>8.1f}"
+            f" {s['steps_std']:>7.1f}"
+            f"  {s['caught_rate']*100:>6.1f}%"
+            f"  {s['time_mean_ms']:>12.4f}"
+            f"  {s['time_median_ms']:>12.4f}"
+        )
+    lines.append(SEP)
+    caught_stats = [s for s in stats if np.isfinite(s["steps_mean"])]
+    bs = min(caught_stats, key=lambda s: s["steps_mean"]) if caught_stats else None
     bt = min(stats, key=lambda s: s["time_mean_ms"])
-    print(f"\n  Strongest: {bs['name']} (avg {bs['steps_mean']:.1f} steps)")
-    print(f"  Fastest  : {bt['name']} (avg {bt['time_mean_ms']:.4f} ms/step)\n")
+    if bs is not None:
+        lines.append(f"  Strongest: {bs['name']} (avg {bs['steps_mean']:.1f} captured-game steps)")
+    else:
+        lines.append("  Strongest: unavailable (no algorithm caught the player)")
+    lines.append(f"  Fastest  : {bt['name']} (avg {bt['time_mean_ms']:.4f} ms/step)")
+    return "\n".join(lines) + "\n"
+
+
+def print_report(stats):
+    print("\n" + format_report(stats))
+
+
+def save_results(stats, out):
+    summary_fields = [
+        "name", "games", "caught_count", "caught_rate",
+        "steps_mean", "steps_median", "steps_std",
+        "time_mean_ms", "time_median_ms", "time_std_ms",
+    ]
+    with open(os.path.join(out, "summary.csv"), "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=summary_fields)
+        writer.writeheader()
+        writer.writerows({field: stat[field] for field in summary_fields} for stat in stats)
+    with open(os.path.join(out, "results.json"), "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    with open(os.path.join(out, "report.txt"), "w", encoding="utf-8") as f:
+        f.write(format_report(stats))
 
 # ════════════════════════════════════════════════════════════════════════════
 # Main
@@ -524,6 +554,7 @@ def main():
               f"AvgTime={s['time_mean_ms']:.4f}ms\n")
 
     print_report(stats)
+    save_results(stats, args.out)
 
     # ── Save 6 independent charts ─────────────────────────────────────────
     print(f"Saving 6 charts to '{args.out}/' ...")
