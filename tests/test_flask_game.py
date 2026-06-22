@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -33,6 +34,14 @@ class FlaskGameTest(unittest.TestCase):
             [{"row": monster["row"], "col": monster["col"]} for monster in monsters],
             expected,
         )
+
+    def test_human_ui_has_shift_dash_shortcut_and_reset(self):
+        html = Path("ui/play/human.html").read_text(encoding="utf-8")
+
+        self.assertIn("e.key === 'Shift'", html)
+        self.assertIn("Dash requires Speed Boots", html)
+        self.assertIn("dashRequested = !dashRequested", html)
+        self.assertIn("dashRequested = false;", html)
 
     def test_create_escape_game(self):
         response = self.make_game({"mode": "escape", "opponent_ai": "astar"})

@@ -363,7 +363,7 @@ canvas{
                         <span class="label">Monster 2 Frozen:</span>
                         <span class="value text-blue" id="stat-frozen-2">0</span>
                     </div>
-                    <button id="dash-toggle" type="button" disabled>Dash OFF</button>
+                    <button id="dash-toggle" type="button" title="Press Shift to toggle Dash" disabled>Dash OFF</button>
                 </div>
             </div>
         </div>
@@ -952,6 +952,20 @@ let aiRunning = false;
 let inputLocked = false;
 
 document.addEventListener('keydown', async e => {
+    if (e.key === 'Shift') {
+        e.preventDefault();
+        if (e.repeat || inputLocked) return;
+        if ((latestEffects.speed_boots_turns || 0) <= 0) {
+            invalidObjectLabel = 'Dash requires Speed Boots';
+            updateItemPanel();
+            return;
+        }
+        invalidObjectLabel = 'none';
+        dashRequested = !dashRequested;
+        updateItemPanel();
+        return;
+    }
+
     const d = DIR_MAP[e.key];
     if (!d || !gameId || inputLocked) return;
 

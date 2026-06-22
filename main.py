@@ -1194,7 +1194,7 @@ INDEX_HTML = """<!doctype html>
         <button class="secondary" data-dir="down">Down</button>
         <button class="secondary" data-dir="right">Right</button>
       </div>
-      <button id="dash" class="secondary" disabled>Dash OFF</button>
+      <button id="dash" class="secondary" title="Press Shift to toggle Dash" disabled>Dash OFF</button>
       <p id="meta" class="meta">No game running.</p>
     </aside>
     <section>
@@ -1308,6 +1308,17 @@ INDEX_HTML = """<!doctype html>
       button.addEventListener("click", () => move(button.dataset.dir));
     });
     document.addEventListener("keydown", event => {
+      if (event.key === "Shift") {
+        event.preventDefault();
+        if (event.repeat || !game) return;
+        if ((game.effects?.speed_boots_turns || 0) <= 0) {
+          meta.textContent = "Dash requires Speed Boots";
+          return;
+        }
+        dashRequested = !dashRequested;
+        render();
+        return;
+      }
       const map = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
       if (map[event.key]) {
         event.preventDefault();
