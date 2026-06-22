@@ -19,6 +19,11 @@ from ai import (
     run_cpp_map_algorithm,
     walls_from_grid,
 )
+from human_predictor import (
+    HumanDirectionPredictor,
+    build_prediction_features,
+    predicted_intercept_target,
+)
 
 Pos = Tuple[int, int]
 ItemKind = str
@@ -58,6 +63,13 @@ FREEZE_TRAP_DURATION = 3
 INVISIBILITY_DURATION = 4
 
 app = Flask(__name__)
+try:
+    human_predictor = HumanDirectionPredictor()
+    print("Human direction predictor loaded.")
+except Exception as exc:
+    human_predictor = None
+    print("Human direction predictor not loaded:", exc)
+
 games: Dict[str, "GameState"] = {}
 
 
@@ -101,6 +113,7 @@ class GameState:
     sa_previous_move: Tuple[Pos, Pos] | None = None
     bfs_previous_human: Pos | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    human_direction_history: List[str] = field(default_factory=list)
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -277,6 +290,7 @@ def load_genetic_map() -> tuple[List[List[int]], Pos, Pos]:
 
 def create_game(payload: dict[str, Any]) -> GameState:
     mode = str(payload.get("mode", "escape")).lower()
+    print("Create game payload:", payload)
     if mode not in {"escape", "chase"}:
         raise ValueError("mode must be 'escape' or 'chase'")
 
@@ -524,6 +538,9 @@ def move_human_with_items(game: GameState, direction: str) -> bool:
     stop_movement = check_player_item_pickup(game)
     if stop_movement:
         game.human_extra_steps = 0
+    game.human_direction_history.append(direction)
+    if len(game.human_direction_history) > 10:
+        game.human_direction_history = game.human_direction_history[-10:]
     return stop_movement
 
 
@@ -642,14 +659,55 @@ def planned_astar_paths(game: GameState) -> List[List[Pos]]:
     m1, m2 = game.monsters[:2]
     d1 = torus_manhattan(m1, game.human, game.grid)
     d2 = torus_manhattan(m2, game.human, game.grid)
+
     if d1 <= d2:
-        return [
-            limited_path(game.grid, m1, game.human, 2),
-            limited_path(game.grid, m2, intercept_point(game.grid, m1, game.human), 1),
-        ]
+        chaser = m1
+        interceptor = m2
+
+        chaser_path = limited_path(
+            game.grid,
+            chaser,
+            game.human,
+            2,
+        )
+
+        intercept_target = get_prediction_intercept_target(
+            game,
+            reference_monster=chaser,
+            fallback_monster=interceptor,
+        )
+
+        interceptor_path = limited_path(
+            game.grid,
+            interceptor,
+            intercept_target,
+            1,
+        )
+
+        return [chaser_path, interceptor_path]
+
+    chaser = m2
+    interceptor = m1
+
+    interceptor_target = get_prediction_intercept_target(
+        game,
+        reference_monster=chaser,
+        fallback_monster=interceptor,
+    )
+
     return [
-        limited_path(game.grid, m1, intercept_point(game.grid, m2, game.human), 1),
-        limited_path(game.grid, m2, game.human, 2),
+        limited_path(
+            game.grid,
+            interceptor,
+            interceptor_target,
+            1,
+        ),
+        limited_path(
+            game.grid,
+            chaser,
+            game.human,
+            2,
+        ),
     ]
 
 
@@ -718,21 +776,92 @@ def move_monsters(game: GameState) -> List[Pos]:
 
 def move_monsters_astar(game: GameState) -> List[Pos]:
     if len(game.monsters) == 1:
-        return [advance_along_path(game.grid, game.monsters[0], game.human, 2)]
-
-    m1, m2 = game.monsters[:2]
-    d1 = torus_manhattan(m1, game.human, game.grid)
-    d2 = torus_manhattan(m2, game.human, game.grid)
-    if d1 <= d2:
         return [
-            advance_along_path(game.grid, m1, game.human, 2),
-            advance_along_path(game.grid, m2, intercept_point(game.grid, m1, game.human), 1),
+            advance_along_path(
+                game.grid,
+                game.monsters[0],
+                game.human,
+                2,
+            )
         ]
-    return [
-        advance_along_path(game.grid, m1, intercept_point(game.grid, m2, game.human), 1),
-        advance_along_path(game.grid, m2, game.human, 2),
-    ]
 
+    astar_monster = game.monsters[0]
+    prediction_monster = game.monsters[1]
+
+    # Monster 1: direct A* chasing
+    new_astar_monster = advance_along_path(
+        game.grid,
+        astar_monster,
+        game.human,
+        2,
+    )
+
+    # Monster 2: prediction-guided interception
+    intercept_target = get_prediction_intercept_target(game)
+
+    new_prediction_monster = advance_along_path(
+        game.grid,
+        prediction_monster,
+        intercept_target,
+        2,
+    )
+
+    return [new_astar_monster, new_prediction_monster]
+
+def get_prediction_intercept_target(
+    game: GameState,
+    reference_monster: Pos,
+    fallback_monster: Pos,
+) -> Pos:
+    """
+    Use the Random Forest model to predict the player's next direction.
+    Then convert the predicted direction into an interception target.
+
+    If prediction fails, fall back to the original intercept_point logic.
+    """
+
+    if human_predictor is None:
+        return intercept_point(
+            game.grid,
+            fallback_monster,
+            game.human,
+        )
+
+    try:
+        feature = build_prediction_features(
+            grid=game.grid,
+            human=game.human,
+            reference_monster=reference_monster,
+            history=game.human_direction_history,
+        )
+
+        predicted_direction = human_predictor.predict_direction(feature)
+
+        target = predicted_intercept_target(
+            grid=game.grid,
+            human=game.human,
+            predicted_direction=predicted_direction,
+            distance=3,
+        )
+
+        print(
+            "[Prediction]",
+            "direction:",
+            predicted_direction,
+            "target:",
+            target,
+        )
+
+        return target
+
+    except Exception as exc:
+        print("[Prediction failed] fallback to intercept point:", exc)
+
+        return intercept_point(
+            game.grid,
+            fallback_monster,
+            game.human,
+        )
 
 def advance_along_path(
     grid: Sequence[Sequence[int]],

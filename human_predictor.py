@@ -26,7 +26,7 @@ FEATURE_COLS = [
     "prev2",
 ]
 
-# 这里必须和你队友训练数据里的 prev1 / prev2 编码一致
+# 这个编码必须和你队友训练 replay_log.jsonl 时一致
 DIRECTION_TO_ID = {
     "up": 0.0,
     "down": 1.0,
@@ -38,7 +38,7 @@ DIRECTION_TO_ID = {
 class HumanDirectionPredictor:
     def __init__(self, model_path: str = MODEL_PATH):
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"model not found: {model_path}")
+            raise FileNotFoundError(f"Model file not found: {model_path}")
 
         with open(model_path, "rb") as f:
             self.model = pickle.load(f)
@@ -68,16 +68,11 @@ def is_floor(grid: Sequence[Sequence[int]], pos: Pos) -> bool:
 def build_prediction_features(
     grid: Sequence[Sequence[int]],
     human: Pos,
-    monster: Pos,
+    reference_monster: Pos,
     history: List[str],
 ) -> dict:
     """
-    Build features in exactly the same format as the Random Forest training code.
-
-    features:
-    rel_row, rel_col,
-    wall_up, wall_down, wall_left, wall_right,
-    prev1, prev2
+    Build features using the same format as the Random Forest training data.
     """
 
     h = len(grid)
@@ -85,8 +80,8 @@ def build_prediction_features(
 
     feature = {}
 
-    feature["rel_row"] = (human[0] - monster[0]) / h
-    feature["rel_col"] = (human[1] - monster[1]) / w
+    feature["rel_row"] = (human[0] - reference_monster[0]) / h
+    feature["rel_col"] = (human[1] - reference_monster[1]) / w
 
     for direction, (dr, dc) in VALID_DIRECTIONS.items():
         nr = (human[0] + dr) % h
@@ -109,15 +104,12 @@ def predicted_intercept_target(
     distance: int = 3,
 ) -> Pos:
     """
-    Convert predicted next direction into an interception target.
+    Convert predicted direction into an interception target.
 
     Example:
-    predicted_direction = "right"
     human = (10, 10)
-    target ≈ (10, 13)
-
-    If the target direction is blocked by walls, use the furthest reachable
-    floor cell along that direction.
+    predicted_direction = "right"
+    target = around (10, 13)
     """
 
     if predicted_direction not in VALID_DIRECTIONS:
