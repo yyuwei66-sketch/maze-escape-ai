@@ -12,6 +12,8 @@
 \usepackage{subcaption}
 \usepackage{listings} 
 \usepackage{xcolor}
+\usepackage{array}
+
 
 \geometry{margin=1in}
 
@@ -453,6 +455,73 @@ where $p_t$ denotes the player's current coordinate, and $\hat{d}_{t+1}$, $\hat{
 \subsection{Turn-Based Movement Logic}
 
 \subsection{Interactive Item System}
+
+\subsection{Interactive Item System}
+
+The item system within this project was designed as a significant component of the game logic, rather than merely a decoration on the map. Since the monsters can chase the player using algorithms such as A* Search, Greedy Search, and machine-learning-based prediction models, the game would become too difficult if the player could only move one step per turn. Therefore, the main purpose of the item system is to provide short-term escaping, defensive, and repositioning abilities, which improves the playability and balance of the game.
+
+This system includes four items: \textbf{Swift Boots, Frost Trap, Teleport Stone, and Cloak}. These four items affect the player’s movement ability, the monsters’ movement status, the player’s location, and the monster-chasing logic respectively. All item effects are integrated with the turn-based movement system. In most cases, the duration of an item effect is updated based on a complete player turn, rather than based on a single movement cell.
+
+\subsubsection{Swift Boots}
+
+Swift Boots is a movement-enhancing item. After the player picks up this item, the player can perform at most two separate one-cell movements in each of the following five complete player turns. These two movement steps can be in different directions. For example, the player can first move upward and then move to the right. Therefore, this item does not simply allow the player to move two cells in a straight line. Instead, it changes the player’s turn structure and allows the player to perform multiple movements within one turn, similar to the movement pattern of the monsters.
+
+This design is more flexible than directly moving two cells in one direction, because the player can turn corners to avoid walls or escape from the monster’s chasing path. Each single-cell movement is still checked independently for wall collision, item pickup, and monster collision. As a result, the player cannot pass through walls or skip important events on the map.
+
+The duration of Swift Boots decreases by one only after the player finishes a complete turn, instead of decreasing after each single movement. If the player picks up another Swift Boots while the effect is still active, the duration will be refreshed to five turns instead of being stacked repeatedly. This mechanism ensures that the item is useful enough for escaping, while preventing the player from staying in an overly powerful state for too long.
+
+\subsubsection{Frost Trap}
+
+Frost Trap is a control-type item. When the player picks up this item, all monsters are immediately frozen for five complete player turns. During the frozen state, monsters cannot move or continue chasing the player.
+
+The main purpose of this item is to provide a short-term safety window for the player. This allows the player to relocate, find a safer path, or collect another item. Since the game can include two monsters at the same time, freezing only one monster may not be enough to help the player escape. Therefore, Frost Trap is designed to freeze all monsters immediately, making it a more effective defensive item in dangerous situations.
+
+To avoid making this item too powerful, the freeze effect does not stack infinitely. If the monsters are already frozen and the player picks up another Frost Trap, the frozen duration will be refreshed or preserved at the maximum value, instead of being added repeatedly. This keeps the item useful while maintaining the challenge of the game.
+
+\subsubsection{Teleport Stone}
+
+Teleport Stone is an emergency escape item. When the player picks up this item, the player is immediately teleported to a safer location on the map. Unlike a purely random teleportation mechanism, the teleportation process in this project considers the positions of the monsters and selects a relatively safe target cell.
+
+The system first checks all valid walkable cells on the map. Invalid positions, such as walls, the current player position, monster positions, active item positions, and active trap positions, are excluded from the candidate list. Then, for each candidate cell, the system calculates its distance to the nearest monster. This distance is used as the safety score of the cell. A larger safety score means that the cell is farther from the closest monster and is therefore safer.
+
+After calculating the safety scores, the candidate cells are sorted according to their safety level. The final teleport target is randomly selected from the top 10\% safest valid cells. This design prevents the player from being teleported into a dangerous area, while still keeping a certain level of randomness in the game.
+
+This mechanism is especially useful in dual-monster mode. Since the safety score is based on the distance to the nearest monster, the selected teleport position must be relatively far from both monsters. As a result, Teleport Stone can help the player escape from situations where the monsters are approaching from different directions.
+
+\subsubsection{Cloak}
+
+Cloak is a stealth-type item. When the player picks up this item, the player becomes invisible for ten complete player turns. During invisibility, monsters cannot detect or capture the player. Instead of using A* Search, Greedy Search, or machine-learning-based prediction to chase the player, the monsters move randomly among valid neighbouring cells.
+
+This design changes the behaviour of the monsters during the invisible state. The monsters are still active in the maze, but they no longer have a clear target. Therefore, the game does not become completely static when the player is invisible. At the same time, even if a monster randomly moves onto the player’s position, the game-over condition will not be triggered while the invisibility effect is active.
+
+The duration of Cloak is also updated based on complete player turns. This is important because Swift Boots may allow the player to perform two movement steps within one turn. In this case, the Cloak duration should still decrease by only one after the whole player turn is completed, rather than decreasing twice. This keeps the time-based logic of all item effects consistent.
+
+After the invisibility duration ends, the monsters return to their normal chasing behaviour, and collision detection becomes active again. Since Cloak can completely prevent the player from being captured for a short period of time, it is designed as a rare and powerful item.
+
+\subsubsection{Item-State Update and Game Balance}
+
+The temporary effects of the items are updated according to the turn-based structure of the game. Swift Boots, Frost Trap, and Cloak all use complete player turns as their duration unit. This means that the item duration is reduced only after the player finishes a full turn, rather than after each single movement step. This rule is necessary to keep the game logic consistent, especially when Swift Boots allows the player to perform two separate movements within one turn.
+
+The item system also improves the balance between the player and the monster agents. The monsters have advantages from search algorithms and prediction models, while the player receives temporary tools for movement, control, teleportation, and invisibility. Therefore, the item system does not remove the challenge of the game. Instead, it gives the player more strategic choices when facing strong monster AI.
+
+Overall, the interactive item system increases the complexity and playability of the game. Swift Boots improves the player’s mobility, Frost Trap provides temporary control over the monsters, Teleport Stone allows emergency repositioning, and Cloak temporarily prevents the monsters from targeting the player. These items work together with the turn-based game logic and make the maze escape process more strategic and dynamic.
+
+\begin{table}[H]
+\centering
+\caption{Summary of Interactive Item Effects}
+\label{tab:item_effects}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{p{3cm} p{3cm} p{8cm}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Effect} \\
+\midrule
+Swift Boots & Mobility & Allows the player to perform two separate one-cell movements per turn for five complete player turns. The two movement steps can be in different directions. \\
+Frost Trap & Control & Immediately freezes all monsters for five complete player turns. Frozen monsters cannot move or continue chasing the player. \\
+Teleport Stone & Escape & Teleports the player to a randomly selected cell from the top 10\% safest valid cells, based on the distance to the nearest monster. \\
+Cloak & Stealth & Makes the player invisible for ten complete player turns. During invisibility, monsters move randomly and cannot capture the player. \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{User Interface and Backend Integration}
 
