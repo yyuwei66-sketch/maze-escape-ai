@@ -1,8 +1,8 @@
 \subsubsection{Simulated Annealing}
 
 At the third difficulty level, Simulated Annealing (SA) is used to plan the
-monster's movement. Unlike A* or BFS, SA does not require every intermediate
-candidate to be a wall-free shortest path. Instead, it searches over complete,
+monster's movement. Unlike A*, SA does not require every intermediate
+candidate to be the shortest path without walls. Instead, it searches over complete,
 continuous routes from the monster to the human and assigns large costs to
 routes that cross walls. This representation makes mutations inexpensive while
 allowing the algorithm to explore routes that differ substantially from the

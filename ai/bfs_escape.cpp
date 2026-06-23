@@ -113,7 +113,6 @@ int main()
         fout<<endl;
     }
 
-    vector<pair<int,int>> bestMoves;
     vector<pair<int,pair<int,int>>> candidates={
         {down,{wrap(xh+1),yh}},
         {up,{wrap(xh-1),yh}},
@@ -121,34 +120,42 @@ int main()
         {left,{xh,wrap(yh-1)}}
     };
 
-    int d_max=-1;
+    vector<pair<int,pair<int,int>>> legalMoves;
+    vector<pair<int,pair<int,int>>> forwardMoves;
     for(const auto& candidate:candidates)
     {
         const auto& pos=candidate.second;
-        if(has_previous_human&&pos.first==previous_xh&&pos.second==previous_yh)continue;
+        if(mp[pos.first][pos.second])continue;
+        legalMoves.push_back(candidate);
+        if(!has_previous_human||pos.first!=previous_xh||pos.second!=previous_yh)
+        {
+            forwardMoves.push_back(candidate);
+        }
+    }
+
+    // Avoid immediately backtracking when another legal move exists. In a
+    // dead end, however, returning to the previous cell is the only way out.
+    const auto& availableMoves=forwardMoves.empty()?legalMoves:forwardMoves;
+    vector<pair<int,int>> bestMoves;
+    int d_max=-1;
+    for(const auto& candidate:availableMoves)
+    {
         if(candidate.first>d_max)d_max=candidate.first;
     }
 
-    for(const auto& candidate:candidates)
+    for(const auto& candidate:availableMoves)
     {
-        const auto& pos=candidate.second;
-        if(has_previous_human&&pos.first==previous_xh&&pos.second==previous_yh)continue;
-        if(candidate.first==d_max)bestMoves.push_back(pos);
+        if(candidate.first==d_max)bestMoves.push_back(candidate.second);
     }
 
-    if(bestMoves.empty())
+    pair<int,int> nextHuman={xh,yh};
+    if(!bestMoves.empty())
     {
-        d_max=max(down,max(up,max(right,left)));
-        if(down==d_max)bestMoves.push_back({wrap(xh+1),yh});
-        if(up==d_max)bestMoves.push_back({wrap(xh-1),yh});
-        if(right==d_max)bestMoves.push_back({xh,wrap(yh+1)});
-        if(left==d_max)bestMoves.push_back({xh,wrap(yh-1)});
+        random_device rd;
+        mt19937 rng(rd());
+        uniform_int_distribution<int> pick(0,(int)bestMoves.size()-1);
+        nextHuman=bestMoves[pick(rng)];
     }
-
-    random_device rd;
-    mt19937 rng(rd());
-    uniform_int_distribution<int> pick(0,(int)bestMoves.size()-1);
-    pair<int,int> nextHuman=bestMoves[pick(rng)];
     fout<<nextHuman.first<<" "<<nextHuman.second<<endl;
 
     fout<<xm<<" "<<ym;

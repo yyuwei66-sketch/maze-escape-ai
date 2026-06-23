@@ -139,6 +139,27 @@ class FlaskGameTest(unittest.TestCase):
         )
         self.assertEqual(main.games[game_id].bfs_previous_human, (0, 29))
 
+    def test_chase_bfs_can_backtrack_when_previous_cell_is_only_exit(self):
+        grid = [[1 for _ in range(30)] for _ in range(30)]
+        for row, col in ((1, 1), (1, 2), (1, 3)):
+            grid[row][col] = 0
+
+        game = main.GameState(
+            grid=grid,
+            human=(1, 1),
+            human_spawn=(1, 1),
+            monsters=[(1, 3)],
+            mode="chase",
+            opponent_ai="bfs",
+            monster_frozen_turns=[0],
+            bfs_previous_human=(1, 2),
+        )
+
+        moved_human = main.move_human_with_bfs(game)
+
+        self.assertEqual(moved_human, (1, 2))
+        self.assertEqual(game.bfs_previous_human, (1, 1))
+
     def test_astar_two_monster_creation(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar", "monster_count": 2}
