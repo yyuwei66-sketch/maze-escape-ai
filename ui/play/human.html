@@ -311,22 +311,22 @@ canvas{
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/boots.png" class="item-img">
-                        <div class="item-name">Boots</div>
+                        <div class="item-name" title="Move twice per turn for 5 turns. Steps can be in different directions.">Swift Boots</div>
                     </div>
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/frozen.png" class="item-img">
-                        <div class="item-name">Frozen</div>
+                        <div class="item-name" title="Freezes all monsters for 5 turns.">Frost Trap</div>
                     </div>
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/door.png" class="item-img">
-                        <div class="item-name">Door</div>
+                        <div class="item-name" title="Teleports you to one of the safest valid tiles.">Teleport Stone</div>
                     </div>
                     <div class="item-card cloak-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/cloak.png" class="item-img">
-                        <div class="item-name">Cloak</div>
+                        <div class="item-name" title="Invisible for 10 player turns. Monsters wander randomly and cannot catch you.">Cloak</div>
                     </div>
                 </div>
 
@@ -363,7 +363,15 @@ canvas{
                         <span class="label">Monster 2 Frozen:</span>
                         <span class="value text-blue" id="stat-frozen-2">0</span>
                     </div>
-                    <button id="dash-toggle" type="button" title="Press Shift to toggle Dash" disabled>Dash OFF</button>
+                    <div class="info-row">
+                        <span class="label">Turn:</span>
+                        <span class="value text-yellow" id="stat-turn-message">Ready</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Remaining steps:</span>
+                        <span class="value text-yellow" id="stat-remaining-steps">0</span>
+                    </div>
+                    <button id="end-turn" type="button" disabled>End Turn</button>
                 </div>
             </div>
         </div>
@@ -623,10 +631,11 @@ function updateItemPanel() {
     document.getElementById('stat-frozen-1').textContent = frozen[0] || 0;
     document.getElementById('stat-frozen-2').textContent = frozen[1] || 0;
     document.getElementById('stat-frozen-2-row').hidden = frozen.length < 2;
-    const dashButton = document.getElementById('dash-toggle');
-    dashButton.disabled = boots <= 0;
-    if (boots <= 0) dashRequested = false;
-    dashButton.textContent = dashRequested ? 'Dash ON' : 'Dash OFF';
+    document.getElementById('end-turn').disabled = !waitingForSecondStep;
+    document.getElementById('stat-turn-message').textContent = waitingForSecondStep
+        ? 'Choose second move or end turn'
+        : 'Ready';
+    document.getElementById('stat-remaining-steps').textContent = remainingPlayerSteps;
 }
 
 
@@ -688,6 +697,10 @@ function updateAnim() {
 
 // ========== 绘制人物 ==========
 function drawHuman() {
+    ctx.save();
+    if ((latestEffects.human_invisible_turns || 0) > 0) {
+        ctx.globalAlpha = 0.45;
+    }
     const scale = 2.7;
     const dw = TILE * scale;
     const dh = TILE * scale;
@@ -707,13 +720,14 @@ function drawHuman() {
     } else {
         if (humanWaitImg) ctx.drawImage(humanWaitImg, dx, dy + breathOffset, dw, dh);
     }
+    ctx.restore();
 }
 
 function drawMonster() {
     const scale = 2.9;
     const baseH = TILE * scale;
 
-    function drawOne(row, col, walkDirection, moveTime) {
+    function drawOne(row, col, walkDirection, moveTime, monsterIndex) {
         const x = col * TILE;
         const y = row * TILE;
 
@@ -738,13 +752,20 @@ function drawMonster() {
         const dx = x + TILE / 2 - renderW / 2;
         const dy = y - (renderH - TILE) * 0.8 + (isWalking ? 0 : monsterBreathOffset);
 
+        ctx.save();
+        if ((latestEffects.monster_frozen_turns || [])[monsterIndex] > 0) {
+            ctx.globalAlpha = 0.55;
+            ctx.shadowColor = '#74c0fc';
+            ctx.shadowBlur = 18;
+        }
         ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, renderW, renderH);
+        ctx.restore();
     }
 
-    drawOne(monster[0], monster[1], monsterWalkDirection, monsterMoveTime);
+    drawOne(monster[0], monster[1], monsterWalkDirection, monsterMoveTime, 0);
 
     if (level === 'hell') {
-        drawOne(monster2[0], monster2[1], monster2WalkDirection, monster2MoveTime);
+        drawOne(monster2[0], monster2[1], monster2WalkDirection, monster2MoveTime, 1);
     }
 }
 
@@ -912,18 +933,13 @@ let lastMoveTime = 0;
 let activeEffect = { name: 'none', turnsLeft: null }; // 当前生效道具
 let invalidObjectLabel = 'none';  // 异常道具提示
 let latestEffects = {};
-let dashRequested = false;
-
-document.getElementById('dash-toggle').addEventListener('click', () => {
-    if ((latestEffects.speed_boots_turns || 0) <= 0) return;
-    dashRequested = !dashRequested;
-    updateItemPanel();
-});
+let waitingForSecondStep = false;
+let remainingPlayerSteps = 0;
 
 const ITEM_DISPLAY_NAME = {
-    speed_boots: 'Speed Boots',
+    speed_boots: 'Swift Boots',
     home_stone: 'Safe Teleport',
-    freeze_trap: 'Freeze Trap',
+    freeze_trap: 'Frost Trap',
     invisibility_cloak: 'Cloak'
 };
 
@@ -952,20 +968,6 @@ let aiRunning = false;
 let inputLocked = false;
 
 document.addEventListener('keydown', async e => {
-    if (e.key === 'Shift') {
-        e.preventDefault();
-        if (e.repeat || inputLocked) return;
-        if ((latestEffects.speed_boots_turns || 0) <= 0) {
-            invalidObjectLabel = 'Dash requires Speed Boots';
-            updateItemPanel();
-            return;
-        }
-        invalidObjectLabel = 'none';
-        dashRequested = !dashRequested;
-        updateItemPanel();
-        return;
-    }
-
     const d = DIR_MAP[e.key];
     if (!d || !gameId || inputLocked) return;
 
@@ -977,10 +979,8 @@ document.addEventListener('keydown', async e => {
         const res = await fetch(`/api/games/${gameId}/move`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ direction: dirKey, dashRequested })
+            body: JSON.stringify({ direction: dirKey })
         });
-
-        dashRequested = false;
 
         const data = await res.json();
 
@@ -1040,6 +1040,8 @@ document.addEventListener('keydown', async e => {
         items = data.items || [];
         traps = data.traps || [];
         latestEffects = data.effects || {};
+        waitingForSecondStep = !!data.waitingForSecondStep;
+        remainingPlayerSteps = data.remainingPlayerStepsThisTurn || 0;
 
         // ════════════════════════════════════════
         // 累计步数：只增不减，跟下面的刷新倒计时完全独立
@@ -1088,6 +1090,44 @@ document.addEventListener('keydown', async e => {
 
         if (data.status === 'ended') gameOver();
 
+    } finally {
+        inputLocked = false;
+    }
+});
+
+document.getElementById('end-turn').addEventListener('click', async () => {
+    if (!gameId || inputLocked || !waitingForSecondStep) return;
+    inputLocked = true;
+    try {
+        const res = await fetch(`/api/games/${gameId}/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'end_turn' })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            invalidObjectLabel = data.error || 'End turn failed';
+            updateItemPanel();
+            return;
+        }
+        human = [data.human.row, data.human.col];
+        monster = [data.monsters[0].row, data.monsters[0].col];
+        monsterTarget = [...monster];
+        monsterQueue = [];
+        if (data.monsters.length > 1) {
+            monster2 = [data.monsters[1].row, data.monsters[1].col];
+            monster2Target = [...monster2];
+            monster2Queue = [];
+        }
+        items = data.items || [];
+        traps = data.traps || [];
+        latestEffects = data.effects || {};
+        waitingForSecondStep = !!data.waitingForSecondStep;
+        remainingPlayerSteps = data.remainingPlayerStepsThisTurn || 0;
+        nextRefreshCountdown = computeNextRefreshCountdown(data.step_count);
+        updateHUD();
+        updateItemPanel();
+        if (data.status === 'ended') gameOver();
     } finally {
         inputLocked = false;
     }
@@ -1159,6 +1199,8 @@ async function init() {
     items = game.items || [];
     traps = game.traps || [];
     latestEffects = game.effects || {};
+    waitingForSecondStep = !!game.waitingForSecondStep;
+    remainingPlayerSteps = game.remainingPlayerStepsThisTurn || 0;
 
     // 累计步数：新开一局清零
     humanSteps = 0;

@@ -15,12 +15,11 @@ inline constexpr int WALL = 1;
 // ===============================
 
 inline constexpr int SPEED_BOOTS_DURATION = 5;
-inline constexpr int SPEED_BOOTS_NORMAL_STEPS = 2;
-inline constexpr int SPEED_BOOTS_DASH_STEPS = 3;
+inline constexpr int SPEED_BOOTS_STEPS_PER_TURN = 2;
 inline constexpr int TELEPORT_SAFE_DISTANCE = 6;
 inline constexpr int FREEZE_TRAP_LIFETIME = 20;
 inline constexpr int FREEZE_TRAP_DURATION = 5;
-inline constexpr int INVISIBILITY_DURATION = 5;
+inline constexpr int INVISIBILITY_DURATION = 10;
 
 // ===============================
 // Basic Data Structures
@@ -57,6 +56,12 @@ struct PlayerState {
     Position spawnPos;
     int speedBootsTurns;
     int invisibleTurns;
+    int remainingPlayerStepsThisTurn = 0;
+    int maxPlayerStepsThisTurn = 1;
+    bool waitingForSecondStep = false;
+    bool pickedBootsThisTurn = false;
+    bool pickedCloakThisTurn = false;
+    bool pickedFreezeThisTurn = false;
 };
 
 struct MonsterState {
@@ -165,7 +170,7 @@ void updateTrapLifetimeByStep(
     std::vector<Item>& traps
 );
 
-void decayStatesAfterSuccessfulPlayerStep(
+void decayStatesAfterCompletedPlayerTurn(
     PlayerState& player,
     std::vector<MonsterState>& monsters,
     std::vector<Item>& traps
@@ -222,7 +227,7 @@ MoveResult movePlayerWithItemCheck(
     std::vector<Item>& traps,
     bool& cloakAlreadySpawned,
     std::vector<MonsterState>& monsters,
-    bool dashRequested = false
+    bool endTurnRequested = false
 );
 
 bool checkGameOver(

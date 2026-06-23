@@ -27,13 +27,13 @@ bool samePosition(Position a, Position b) {
 
 string itemName(ItemType type) {
     if (type == SPEED_BOOTS) {
-        return "Speed Boots";
+        return "Swift Boots";
     }
     else if (type == HOME_STONE) {
         return "Safe Teleport Stone";
     }
     else if (type == FREEZE_TRAP) {
-        return "Freeze Trap";
+        return "Frost Trap";
     }
     else {
         return "Invisibility Cloak";
@@ -314,13 +314,13 @@ void updateTrapLifetimeByStep(vector<Item>& traps) {
             trap.lifetime--;
             if (trap.lifetime <= 0) {
                 trap.active = false;
-                cout << "[UI Info] Freeze Trap lifetime expired. It disappeared." << endl;
+                cout << "[UI Info] Frost Trap lifetime expired. It disappeared." << endl;
             }
         }
     }
 }
 
-void decayStatesAfterSuccessfulPlayerStep(
+void decayStatesAfterCompletedPlayerTurn(
     PlayerState& player,
     vector<MonsterState>& monsters,
     vector<Item>& traps
@@ -342,29 +342,32 @@ void decayStatesAfterSuccessfulPlayerStep(
     }
 }
 
-static void finishSuccessfulPlayerInput(
+static void finishPlayerTurn(
     PlayerState& player,
     vector<MonsterState>& monsters,
-    vector<Item>& traps,
-    bool pickedBoots,
-    bool pickedCloak,
-    bool pickedFreeze
+    vector<Item>& traps
 ) {
     updateTrapLifetimeByStep(traps);
 
-    if (!pickedBoots && player.speedBootsTurns > 0) {
+    if (!player.pickedBootsThisTurn && player.speedBootsTurns > 0) {
         player.speedBootsTurns--;
     }
-    if (!pickedCloak && player.invisibleTurns > 0) {
+    if (!player.pickedCloakThisTurn && player.invisibleTurns > 0) {
         player.invisibleTurns--;
     }
-    if (!pickedFreeze) {
+    if (!player.pickedFreezeThisTurn) {
         for (MonsterState& monster : monsters) {
             if (monster.frozenTurns > 0) {
                 monster.frozenTurns--;
             }
         }
     }
+
+    player.remainingPlayerStepsThisTurn = 0;
+    player.waitingForSecondStep = false;
+    player.pickedBootsThisTurn = false;
+    player.pickedCloakThisTurn = false;
+    player.pickedFreezeThisTurn = false;
 }
 
 bool applyItemEffect(
@@ -378,8 +381,8 @@ bool applyItemEffect(
 ) {
     if (item.type == SPEED_BOOTS) {
         player.speedBootsTurns = SPEED_BOOTS_DURATION;
-        cout << "[Effect] Speed Boots active for " << SPEED_BOOTS_DURATION
-             << " movement inputs." << endl;
+        cout << "[Effect] Swift Boots active for " << SPEED_BOOTS_DURATION
+             << " player turns." << endl;
         item.active = false;
         return false;
     }
@@ -400,16 +403,19 @@ bool applyItemEffect(
                 FREEZE_TRAP_DURATION
             );
         }
-        cout << "[Effect] Freeze Trap triggered: Monsters frozen for "
+        cout << "[Effect] Frost Trap activated: all monsters frozen for "
              << FREEZE_TRAP_DURATION << " player steps." << endl;
         item.active = false;
         return false;
     }
     else if (item.type == INVISIBILITY_CLOAK) {
-        player.invisibleTurns = INVISIBILITY_DURATION;
+        player.invisibleTurns = max(
+            player.invisibleTurns,
+            INVISIBILITY_DURATION
+        );
         cloakAlreadySpawned = true;
-        cout << "[Effect] Invisibility Cloak triggered: Player invisible for "
-             << INVISIBILITY_DURATION << " player steps." << endl;
+        cout << "[Effect] Cloak activated: invisible for "
+             << INVISIBILITY_DURATION << " turns." << endl;
         item.active = false;
         return false;
     }
@@ -444,7 +450,7 @@ void checkMonsterTrap(vector<MonsterState>& monsters, vector<Item>& traps) {
                 );
                 trap.active = false;
                 cout << "[Combat] Monster " << i + 1 
-                     << " stepped on Freeze Trap! Frozen for "
+                     << " stepped on Frost Trap! Frozen for "
                      << FREEZE_TRAP_DURATION << " player steps." << endl;
             }
         }
@@ -556,53 +562,61 @@ MoveResult movePlayerWithItemCheck(
     vector<Item>& traps,
     bool& cloakAlreadySpawned,
     vector<MonsterState>& monsters,
-    bool dashRequested
+    bool endTurnRequested
 ) {
-    const int maxSteps = player.speedBootsTurns <= 0 ? 1
-        : (dashRequested ? SPEED_BOOTS_DASH_STEPS : SPEED_BOOTS_NORMAL_STEPS);
-    bool moved = false;
-    bool pickedBoots = false;
-    bool pickedCloak = false;
-    bool pickedFreeze = false;
-
-    for (int step = 0; step < maxSteps; ++step) {
-        if (!movePlayerOneStep(player, dr, dc, grid)) break;
-        moved = true;
-        if (checkGameOver(player, monsters)) return MOVE_CAUGHT;
-
-        for (Item& item : items) {
-            if (!item.active || !samePosition(player.pos, item.pos)) continue;
-            pickedBoots = pickedBoots || item.type == SPEED_BOOTS;
-            pickedCloak = pickedCloak || item.type == INVISIBILITY_CLOAK;
-            pickedFreeze = pickedFreeze || item.type == FREEZE_TRAP;
-            bool stopMovement = applyItemEffect(
-                item, player, traps, cloakAlreadySpawned, grid, monsters, &items
-            );
-            if (stopMovement) {
-                finishSuccessfulPlayerInput(
-                    player,
-                    monsters,
-                    traps,
-                    pickedBoots,
-                    pickedCloak,
-                    pickedFreeze
-                );
-                return MOVE_END_PHASE;
-            }
-            break;
-        }
+    if (endTurnRequested) {
+        if (!player.waitingForSecondStep) return MOVE_BLOCKED;
+        finishPlayerTurn(player, monsters, traps);
+        return MOVE_END_PHASE;
     }
-    if (!moved) return MOVE_BLOCKED;
 
-    finishSuccessfulPlayerInput(
-        player,
-        monsters,
-        traps,
-        pickedBoots,
-        pickedCloak,
-        pickedFreeze
-    );
+    if (player.remainingPlayerStepsThisTurn <= 0) {
+        player.maxPlayerStepsThisTurn = player.speedBootsTurns > 0
+            ? SPEED_BOOTS_STEPS_PER_TURN
+            : 1;
+        player.remainingPlayerStepsThisTurn = player.maxPlayerStepsThisTurn;
+        player.waitingForSecondStep = false;
+        player.pickedBootsThisTurn = false;
+        player.pickedCloakThisTurn = false;
+        player.pickedFreezeThisTurn = false;
+    }
 
+    if (!movePlayerOneStep(player, dr, dc, grid)) {
+        if (player.remainingPlayerStepsThisTurn == player.maxPlayerStepsThisTurn) {
+            player.remainingPlayerStepsThisTurn = 0;
+            return MOVE_BLOCKED;
+        }
+        finishPlayerTurn(player, monsters, traps);
+        return MOVE_END_PHASE;
+    }
+
+    player.remainingPlayerStepsThisTurn--;
+    bool teleportTriggered = false;
+    for (Item& item : items) {
+        if (!item.active || !samePosition(player.pos, item.pos)) continue;
+        player.pickedBootsThisTurn =
+            player.pickedBootsThisTurn || item.type == SPEED_BOOTS;
+        player.pickedCloakThisTurn =
+            player.pickedCloakThisTurn || item.type == INVISIBILITY_CLOAK;
+        player.pickedFreezeThisTurn =
+            player.pickedFreezeThisTurn || item.type == FREEZE_TRAP;
+        teleportTriggered = applyItemEffect(
+            item, player, traps, cloakAlreadySpawned, grid, monsters, &items
+        );
+        break;
+    }
+
+    if (checkGameOver(player, monsters)) {
+        finishPlayerTurn(player, monsters, traps);
+        return MOVE_CAUGHT;
+    }
+
+    if (teleportTriggered || player.remainingPlayerStepsThisTurn <= 0) {
+        finishPlayerTurn(player, monsters, traps);
+        return MOVE_END_PHASE;
+    }
+
+    player.waitingForSecondStep = true;
     return MOVE_CONTINUE;
 }
 

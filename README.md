@@ -334,21 +334,36 @@ curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
   -d '{"direction":"up"}'
 ```
 
-When Speed Boots is active, request a one-input dash (up to three cells) with
-the optional `dashRequested` boolean. It defaults to `false`, and the server
-ignores it when boots are inactive:
+Swift Boots allows two separate one-tile move requests in one player turn, so
+the second move may use a different direction. After the first move, the
+response sets `waitingForSecondStep` to `true`. Submit another direction or end
+the turn early:
 
 ```bash
 curl -X POST http://127.0.0.1:5000/api/games/<game_id>/move \
   -H 'Content-Type: application/json' \
-  -d '{"direction":"right","dashRequested":true}'
+  -d '{"action":"end_turn"}'
 ```
+
+The older `{ "endTurn": true }` form remains accepted as a compatibility
+alias; Dash requests and controls have been removed.
 
 Current durations are returned under `effects.speed_boots_turns`,
 `effects.human_invisible_turns`, and `effects.monster_frozen_turns`.
 The same response also exposes `speedBootsTurns`, `invisibleTurns`,
-`dashAvailable`, `monster_states`, `pickedItems`, `items`, `traps`, and a
-per-input `message` for frontend status rendering.
+`remainingPlayerStepsThisTurn`, `maxPlayerStepsThisTurn`,
+`waitingForSecondStep`, `gameOver`, `monster_states`, `pickedItems`, `items`,
+`traps`, and a per-input `message` for frontend status rendering.
+
+The Invisibility Cloak lasts for 10 completed player turns. While it is active,
+monsters wander randomly instead of chasing and cannot capture the player. Its
+duration decreases once when the complete player turn ends, not after each
+movement step, so a two-step Swift Boots turn consumes only one cloak turn.
+
+Frost Trap immediately freezes every monster for 5 completed player turns;
+re-picking preserves the larger remaining duration rather than stacking it.
+Teleport Stone ends the player movement phase and selects randomly from the top
+10% safest valid cells, scored by distance to the nearest monster.
 
 Move in chase mode:
 
