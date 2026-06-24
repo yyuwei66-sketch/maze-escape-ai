@@ -264,6 +264,27 @@ canvas{
     25% { transform: translate(calc(-50% - 5px), -50%); }
     75% { transform: translate(calc(-50% + 5px), -50%); }
 }
+
+#end-turn-btn {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 999;
+    font-family: 'Munro', monospace;
+}
+
+#end-turn-btn button {
+    background: #6b4321;
+    color: #ffe066;
+    border: 4px solid #2a1606;
+    padding: 12px 32px;
+    font-family: 'Munro', monospace;
+    font-size: 20px;
+    cursor: pointer;
+    letter-spacing: 3px;
+}
+
 </style>
 </head>
 
@@ -272,6 +293,10 @@ canvas{
     <div class="popup-frame">
         <p class="popup-title">WALL AHEAD!</p>
     </div>
+</div>
+
+<div id="end-turn-btn" style="display:none;">
+    <button onclick="endTurn()">End Turn</button>
 </div>
 
 <div class="game">
@@ -311,67 +336,49 @@ canvas{
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/boots.png" class="item-img">
-                        <div class="item-name" title="Move twice per turn for 5 turns. Steps can be in different directions.">Swift Boots</div>
+                        <div class="item-name">Boots</div>
                     </div>
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/frozen.png" class="item-img">
-                        <div class="item-name" title="Freezes all monsters for 5 turns.">Frost Trap</div>
+                        <div class="item-name">Frozen</div>
                     </div>
                     <div class="item-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/door.png" class="item-img">
-                        <div class="item-name" title="Teleports you to one of the safest valid tiles.">Teleport Stone</div>
+                        <div class="item-name">Door</div>
                     </div>
                     <div class="item-card cloak-card">
                         <img src="/ui/play/card.png" class="card-bg">
                         <img src="/ui/play/cloak.png" class="item-img">
-                        <div class="item-name" title="Invisible for 10 player turns. Monsters wander randomly and cannot catch you.">Cloak</div>
+                        <div class="item-name">Cloak</div>
                     </div>
                 </div>
 
                 <div class="item-info">
                     <div class="info-row">
-                        <span class="label">Current item:</span>
-                        <span class="value text-yellow" id="stat-current-item">none</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="label">Expiration turns:</span>
-                        <span class="value text-yellow" id="stat-expiration">—</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="label">Next refresh:</span>
-                        <span class="value text-yellow" id="stat-next-refresh">5</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="label">Invalid object:</span>
-                        <span class="value text-red" id="stat-invalid">none</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="label">Speed Boots:</span>
-                        <span class="value text-yellow" id="stat-speed-boots">0</span>
+                        <span class="label">Swift Boots:</span>
+                        <span class="value text-yellow" id="stat-boots-turns">—</span>
                     </div>
                     <div class="info-row">
                         <span class="label">Invisible:</span>
-                        <span class="value text-yellow" id="stat-invisible">0</span>
+                        <span class="value text-blue" id="stat-invisible-turns">—</span>
                     </div>
                     <div class="info-row">
                         <span class="label">Monster 1 Frozen:</span>
-                        <span class="value text-blue" id="stat-frozen-1">0</span>
+                        <span class="value text-blue" id="stat-frozen-1">—</span>
                     </div>
-                    <div class="info-row" id="stat-frozen-2-row" hidden>
+                    <div class="info-row" id="frozen-2-row" style="display:none;">
                         <span class="label">Monster 2 Frozen:</span>
-                        <span class="value text-blue" id="stat-frozen-2">0</span>
+                        <span class="value text-blue" id="stat-frozen-2">—</span>
                     </div>
                     <div class="info-row">
-                        <span class="label">Turn:</span>
-                        <span class="value text-yellow" id="stat-turn-message">Ready</span>
+                        <span class="label">Next refresh:</span>
+                        <span class="value text-yellow" id="stat-next-refresh">10</span>
                     </div>
-                    <div class="info-row">
-                        <span class="label">Remaining steps:</span>
-                        <span class="value text-yellow" id="stat-remaining-steps">0</span>
+                    <div class="info-row" id="second-step-hint" style="display:none;">
+                        <span class="value text-yellow">Choose 2nd move or End Turn</span>
                     </div>
-                    <button id="end-turn" type="button" disabled>End Turn</button>
                 </div>
             </div>
         </div>
@@ -402,6 +409,10 @@ let monster2MoveTime = 0;
 
 let floorImg = null;
 const obstacles = {};
+
+let invisibleTurns = 0;
+let data_effects_cache = null;
+let data_waiting = false;
 
 // ── 道具系统：地图上的道具/陷阱 + 拾取特效 ──
 let items = [];          // 来自后端 serialize() 的 items 数组 [{type, name, symbol, pos:{row,col}, active, lifetime}]
@@ -618,24 +629,33 @@ function updateHUD() {
 }
 
 function updateItemPanel() {
-    document.getElementById('stat-current-item').textContent = activeEffect.name;
-    document.getElementById('stat-expiration').textContent =
-        activeEffect.turnsLeft === null ? '—' : activeEffect.turnsLeft;
+    const bootsTurns = data_effects_cache?.speed_boots_turns ?? 0;
+    const invisTurns = data_effects_cache?.human_invisible_turns ?? 0;
+    const frozenTurns = data_effects_cache?.monster_frozen_turns ?? [];
+
+    document.getElementById('stat-boots-turns').textContent =
+        bootsTurns > 0 ? `${bootsTurns} turns left` : '—';
+    document.getElementById('stat-invisible-turns').textContent =
+        invisTurns > 0 ? `${invisTurns} turns left` : '—';
+    document.getElementById('stat-frozen-1').textContent =
+        frozenTurns[0] > 0 ? `${frozenTurns[0]} turns left` : '—';
+
+    const frozen2Row = document.getElementById('frozen-2-row');
+    if (level === 'hell' && frozenTurns.length > 1) {
+        frozen2Row.style.display = 'flex';
+        document.getElementById('stat-frozen-2').textContent =
+            frozenTurns[1] > 0 ? `${frozenTurns[1]} turns left` : '—';
+    } else {
+        frozen2Row.style.display = 'none';
+    }
+
     document.getElementById('stat-next-refresh').textContent = nextRefreshCountdown;
-    document.getElementById('stat-invalid').textContent = invalidObjectLabel;
-    const effects = latestEffects || {};
-    const boots = effects.speed_boots_turns || 0;
-    document.getElementById('stat-speed-boots').textContent = boots;
-    document.getElementById('stat-invisible').textContent = effects.human_invisible_turns || 0;
-    const frozen = effects.monster_frozen_turns || [];
-    document.getElementById('stat-frozen-1').textContent = frozen[0] || 0;
-    document.getElementById('stat-frozen-2').textContent = frozen[1] || 0;
-    document.getElementById('stat-frozen-2-row').hidden = frozen.length < 2;
-    document.getElementById('end-turn').disabled = !waitingForSecondStep;
-    document.getElementById('stat-turn-message').textContent = waitingForSecondStep
-        ? 'Choose second move or end turn'
-        : 'Ready';
-    document.getElementById('stat-remaining-steps').textContent = remainingPlayerSteps;
+
+    const hint = document.getElementById('second-step-hint');
+    hint.style.display = data_waiting ?? false ? 'flex' : 'none';
+
+    const endBtn = document.getElementById('end-turn-btn');
+    endBtn.style.display = data_waiting ?? false ? 'block' : 'none';
 }
 
 
@@ -697,10 +717,6 @@ function updateAnim() {
 
 // ========== 绘制人物 ==========
 function drawHuman() {
-    ctx.save();
-    if ((latestEffects.human_invisible_turns || 0) > 0) {
-        ctx.globalAlpha = 0.45;
-    }
     const scale = 2.7;
     const dw = TILE * scale;
     const dh = TILE * scale;
@@ -708,6 +724,8 @@ function drawHuman() {
     const dy = human[0] * TILE - (dh - TILE) * 0.8;
 
     const isWalking = (performance.now() - lastMoveTime) < 300;
+
+    if (invisibleTurns > 0) ctx.globalAlpha = 0.4;
 
     if (isWalking && humanWalkImgs[walkDirection]) {
         const img = humanWalkImgs[walkDirection];
@@ -720,14 +738,15 @@ function drawHuman() {
     } else {
         if (humanWaitImg) ctx.drawImage(humanWaitImg, dx, dy + breathOffset, dw, dh);
     }
-    ctx.restore();
+
+    ctx.globalAlpha = 1.0;
 }
 
 function drawMonster() {
     const scale = 2.9;
     const baseH = TILE * scale;
 
-    function drawOne(row, col, walkDirection, moveTime, monsterIndex) {
+    function drawOne(row, col, walkDirection, moveTime) {
         const x = col * TILE;
         const y = row * TILE;
 
@@ -752,20 +771,15 @@ function drawMonster() {
         const dx = x + TILE / 2 - renderW / 2;
         const dy = y - (renderH - TILE) * 0.8 + (isWalking ? 0 : monsterBreathOffset);
 
-        ctx.save();
-        if ((latestEffects.monster_frozen_turns || [])[monsterIndex] > 0) {
-            ctx.globalAlpha = 0.55;
-            ctx.shadowColor = '#74c0fc';
-            ctx.shadowBlur = 18;
-        }
+        if (invisibleTurns > 0) ctx.globalAlpha = 0.4;
         ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, renderW, renderH);
-        ctx.restore();
+        ctx.globalAlpha = 1.0;
     }
 
-    drawOne(monster[0], monster[1], monsterWalkDirection, monsterMoveTime, 0);
+    drawOne(monster[0], monster[1], monsterWalkDirection, monsterMoveTime);
 
     if (level === 'hell') {
-        drawOne(monster2[0], monster2[1], monster2WalkDirection, monster2MoveTime, 1);
+        drawOne(monster2[0], monster2[1], monster2WalkDirection, monster2MoveTime);
     }
 }
 
@@ -932,14 +946,11 @@ let lastMoveTime = 0;
 // ── 道具面板状态 ──
 let activeEffect = { name: 'none', turnsLeft: null }; // 当前生效道具
 let invalidObjectLabel = 'none';  // 异常道具提示
-let latestEffects = {};
-let waitingForSecondStep = false;
-let remainingPlayerSteps = 0;
 
 const ITEM_DISPLAY_NAME = {
-    speed_boots: 'Swift Boots',
+    speed_boots: 'Speed Boots',
     home_stone: 'Safe Teleport',
-    freeze_trap: 'Frost Trap',
+    freeze_trap: 'Freeze Trap',
     invisibility_cloak: 'Cloak'
 };
 
@@ -986,13 +997,9 @@ document.addEventListener('keydown', async e => {
 
         if (!res.ok) {
             console.warn('移动被服务器拒绝:', res.status, data);
-            invalidObjectLabel = data && data.error ? data.error : 'blocked';
-            updateItemPanel();
             showWallPopup();
             return; // 不更新人物/怪物状态，也不触发走路动画
         }
-
-        invalidObjectLabel = 'none';
 
         // 确认移动成功后才触发走路动画
         walkDirection = dirKey;
@@ -1001,8 +1008,7 @@ document.addEventListener('keydown', async e => {
         // 拾取检测：用移动前的位置 + 方向算出本来要走到的格子，
         // 在旧的 items 列表里查这个格子上是不是有道具
         const landedPos = predictNextPos(human, dirKey);
-        const pickedType = (data.pickedItems || [])[0];
-        const pickedItem = items.find(it => it.type === pickedType) || items.find(
+        const pickedItem = items.find(
             it => it.pos.row === landedPos[0] && it.pos.col === landedPos[1]
         );
 
@@ -1011,6 +1017,7 @@ document.addEventListener('keydown', async e => {
         const oldMonster2 = [...monster2];
 
         human = [data.human.row, data.human.col];
+        invisibleTurns = data.effects?.human_invisible_turns ?? 0;
 
         // ── 怪物1：只有真的移动了才播放走路动画，否则保持原地不动 ──
         const newMonster1Pos = [data.monsters[0].row, data.monsters[0].col];
@@ -1038,10 +1045,9 @@ document.addEventListener('keydown', async e => {
         }
 
         items = data.items || [];
+        data_effects_cache = data.effects;
+        data_waiting = data.waitingForSecondStep ?? false;
         traps = data.traps || [];
-        latestEffects = data.effects || {};
-        waitingForSecondStep = !!data.waitingForSecondStep;
-        remainingPlayerSteps = data.remainingPlayerStepsThisTurn || 0;
 
         // ════════════════════════════════════════
         // 累计步数：只增不减，跟下面的刷新倒计时完全独立
@@ -1066,18 +1072,6 @@ document.addEventListener('keydown', async e => {
             });
         }
 
-        // ── 道具使用面板（current item / expiration）──
-        if (pickedItem) {
-            const name = ITEM_DISPLAY_NAME[pickedItem.type] || pickedItem.type;
-            if (pickedItem.type === 'invisibility_cloak') {
-                activeEffect = { name, turnsLeft: latestEffects.human_invisible_turns || 0 };
-            } else {
-                activeEffect = { name, turnsLeft: INSTANT_EFFECT_DISPLAY_STEPS };
-            }
-        } else if (activeEffect.turnsLeft != null) {
-            activeEffect.turnsLeft = Math.max(0, activeEffect.turnsLeft - 1);
-            if (activeEffect.turnsLeft === 0) activeEffect = { name: 'none', turnsLeft: null };
-        }
 
         // ════════════════════════════════════════
         // 刷新倒计时：完全独立的一套数字，只看后端 step_count
@@ -1095,8 +1089,8 @@ document.addEventListener('keydown', async e => {
     }
 });
 
-document.getElementById('end-turn').addEventListener('click', async () => {
-    if (!gameId || inputLocked || !waitingForSecondStep) return;
+async function endTurn() {
+    if (!gameId || !data_waiting) return;
     inputLocked = true;
     try {
         const res = await fetch(`/api/games/${gameId}/move`, {
@@ -1105,33 +1099,46 @@ document.getElementById('end-turn').addEventListener('click', async () => {
             body: JSON.stringify({ action: 'end_turn' })
         });
         const data = await res.json();
-        if (!res.ok) {
-            invalidObjectLabel = data.error || 'End turn failed';
-            updateItemPanel();
-            return;
-        }
+        if (!res.ok) return;
+
         human = [data.human.row, data.human.col];
-        monster = [data.monsters[0].row, data.monsters[0].col];
-        monsterTarget = [...monster];
-        monsterQueue = [];
-        if (data.monsters.length > 1) {
-            monster2 = [data.monsters[1].row, data.monsters[1].col];
-            monster2Target = [...monster2];
-            monster2Queue = [];
+        invisibleTurns = data.effects?.human_invisible_turns ?? 0;
+
+        const oldMonster1 = [...monster];
+        const newMonster1Pos = [data.monsters[0].row, data.monsters[0].col];
+        const monster1Moved = oldMonster1[0] !== newMonster1Pos[0] || oldMonster1[1] !== newMonster1Pos[1];
+        monsterQueue = monster1Moved
+            ? (data.monsters[0].path?.length > 0
+                ? data.monsters[0].path.map(p => [p.row, p.col])
+                : [newMonster1Pos])
+            : [];
+
+        if (level === 'hell' && data.monsters.length > 1) {
+            const oldMonster2 = [...monster2];
+            const newMonster2Pos = [data.monsters[1].row, data.monsters[1].col];
+            const monster2Moved = oldMonster2[0] !== newMonster2Pos[0] || oldMonster2[1] !== newMonster2Pos[1];
+            monster2Queue = monster2Moved
+                ? (data.monsters[1].path?.length > 0
+                    ? data.monsters[1].path.map(p => [p.row, p.col])
+                    : [newMonster2Pos])
+                : [];
         }
+
         items = data.items || [];
         traps = data.traps || [];
-        latestEffects = data.effects || {};
-        waitingForSecondStep = !!data.waitingForSecondStep;
-        remainingPlayerSteps = data.remainingPlayerStepsThisTurn || 0;
+        data_effects_cache = data.effects;
+        data_waiting = data.waitingForSecondStep ?? false;
         nextRefreshCountdown = computeNextRefreshCountdown(data.step_count);
+
+        advanceMonsterLeg();
         updateHUD();
         updateItemPanel();
+
         if (data.status === 'ended') gameOver();
     } finally {
         inputLocked = false;
     }
-});
+}
 
 function gameOver() {
     cancelAnimationFrame(animFrameId);
@@ -1198,9 +1205,6 @@ async function init() {
     monsterTarget = [...monster];
     items = game.items || [];
     traps = game.traps || [];
-    latestEffects = game.effects || {};
-    waitingForSecondStep = !!game.waitingForSecondStep;
-    remainingPlayerSteps = game.remainingPlayerStepsThisTurn || 0;
 
     // 累计步数：新开一局清零
     humanSteps = 0;
