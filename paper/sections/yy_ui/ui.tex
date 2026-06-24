@@ -1,0 +1,190 @@
+\section{Game System Design and Gameplay Integration}
+
+\subsection{Overall Game Flow}
+
+\subsubsection{Game Execution Process}
+
+The complete game flow of \textit{Maze Escape} can be divided into three stages: initialization, turn-based gameplay, and end-game evaluation with reset. Together, these stages form a continuous cycle that starts when the game launches, ends when a win or loss condition is reached, and then returns to the beginning for a new game session.
+
+\paragraph{1. Initialization Stage}
+After selecting Start Game, the player first chooses a character on the Character page. If the player selects Human, a difficulty level must be chosen before entering the game. If Monster is selected, the game starts immediately.
+
+Before the game begins, the system uses a genetic algorithm to generate the maze, determine the initial item spawn locations, and set the starting positions of both the Human and the Monster. A minimum safe distance is maintained between them to prevent the Human from being caught immediately at the start of the game.
+
+\paragraph{2. Turn-Based Gameplay}
+The game follows a fixed turn order. In each round, the player-controlled character always moves first, followed by the AI-controlled character. The Human can move one tile per turn, while the Monster can move two tiles per turn.
+
+After every movement, the character's position is updated and the step count is synchronized with the HUD. The system then checks whether the Human and Monster occupy the same position. This check serves as the connection between the turn-based gameplay loop and the end-game condition.
+
+When playing in Human mode, the system also checks whether the Human has stepped on an item. If so, the corresponding item effect is triggered and integrated into the gameplay.
+
+\paragraph{3. End-Game Evaluation and Reset}
+The game ends once the Human and Monster occupy the same position on the map. The system then switches to the End page.
+
+On the End page, players can choose ``Replay'', which generates a new map while keeping the same game mode and difficulty settings, or ``Return to Main Menu'' to go back to the start screen.
+
+After the reset is completed, the game returns to Stage (1), creating a complete gameplay cycle.
+
+\subsubsection{Interface Navigation and Global Button Rules}
+
+From the frontend perspective, the game flow is reflected through page transitions between different interfaces. The navigation sequence is:
+
+\begin{center}
+Index $\rightarrow$ Character Select $\rightarrow$ (Human passes through Difficulty Selection, Monster skips this step) $\rightarrow$ Game $\rightarrow$ End
+\end{center}
+
+The following flowchart illustrates the complete navigation process:
+
+
+Except for the Index page, all other interfaces support two global shortcut keys:
+
+\begin{itemize}
+    \item Press \textbf{M} to open the Manual overlay, which contains game instructions and the item guide. The overlay can be closed using the button in the top-right corner without leaving the current page.
+    \item Press \textbf{ESC} to return directly to the Index page.
+\end{itemize}
+
+These shortcut key instructions are also included in the Manual for player reference.
+
+\subsection{Game State Representation}
+
+The game state is centrally managed through a \texttt{GameState} data class. Each game session is represented by an independent instance and stored in the global \texttt{games} dictionary using \texttt{game\_id} as the key. This design allows multiple game sessions to run simultaneously.
+
+\paragraph{1. Grid and Coordinate System}
+The map is represented as a two-dimensional matrix, where each cell is classified as either a walkable path or an unwalkable wall. In addition, the map uses a wrap-around boundary design. When a player or monster moves beyond one edge of the map, it reappears on the opposite side instead of being blocked by the boundary.
+
+The positions of the player, monster, and items are not stored directly within the grid. Instead, they are maintained separately as independent game data.
+
+\paragraph{2. Entity States}
+The player state mainly records the current position of the player and any temporary effects gained from collected items. The monster state records its current position and whether it is currently affected by any item-related effects.
+
+\paragraph{3. Mode and Algorithm Binding}
+The algorithms used for different game modes and difficulty levels are managed through a separate scheduling mechanism. The selected algorithm is displayed on the HUD when the game starts. This design keeps the game state structure independent of any specific algorithm implementation.
+
+\paragraph{4. Item and Effect States}
+Before being collected, items exist as entities placed on the map. Once collected, they are converted into temporary status effects applied to either the player or the monster. All items take effect immediately after pickup, and their effects gradually decrease as turns progress.
+
+\subsection{Turn-Based Movement Logic}
+
+Based on the fixed turn order described in Section 3.1, this section explains the detailed movement rules used during gameplay.
+
+By default, the player can move one tile per turn, while the monster can move two tiles per turn. Before each movement, the system checks whether the target tile is walkable. If the tile is blocked by a wall, the movement is rejected and the game state remains unchanged.
+
+Collision and capture checks are performed after every single-tile movement rather than only once at the end of a turn. This allows the game to detect captures immediately when they occur.
+
+Since the number of player movements can be affected by item effects, the system does not assume a fixed number of moves per turn. Instead, it continuously checks whether the player still has remaining movement points in the current turn. The monster only begins its turn after the player has used all available moves or when a special effect ends the player's movement phase early.
+
+The monster's two-tile movement is executed step by step rather than as a single jump. After each tile movement, the system checks again whether the monster and player occupy the same position. If the player is captured after the first step, the second step is not executed. This step-by-step design also allows the frontend to render intermediate monster positions, resulting in smoother movement animations.
+
+
+\subsection{Interactive Item System}
+
+The item system within this project was designed as a significant component of the game logic, rather than merely a decoration on the map. Since the monsters can chase the player using algorithms such as A* Search, Greedy Search, and machine-learning-based prediction models, the game would become too difficult if the player could only move one step per turn. Therefore, the main purpose of the item system is to provide short-term escaping, defensive, and repositioning abilities, which improves the playability and balance of the game.
+
+This system includes four items: \textbf{Swift Boots, Frost Trap, Teleport Stone, and Cloak}. These four items affect the player’s movement ability, the monsters’ movement status, the player’s location, and the monster-chasing logic respectively. All item effects are integrated with the turn-based movement system. In most cases, the duration of an item effect is updated based on a complete player turn, rather than based on a single movement cell.
+
+\subsubsection{Swift Boots}
+
+Swift Boots is a movement-enhancing item. After the player picks up this item, the player can perform at most two separate one-cell movements in each of the following five complete player turns. These two movement steps can be in different directions. For example, the player can first move upward and then move to the right. Therefore, this item does not simply allow the player to move two cells in a straight line. Instead, it changes the player’s turn structure and allows the player to perform multiple movements within one turn, similar to the movement pattern of the monsters.
+
+This design is more flexible than directly moving two cells in one direction, because the player can turn corners to avoid walls or escape from the monster’s chasing path. Each single-cell movement is still checked independently for wall collision, item pickup, and monster collision. As a result, the player cannot pass through walls or skip important events on the map.
+
+The duration of Swift Boots decreases by one only after the player finishes a complete turn, instead of decreasing after each single movement. If the player picks up another Swift Boots while the effect is still active, the duration will be refreshed to five turns instead of being stacked repeatedly. This mechanism ensures that the item is useful enough for escaping, while preventing the player from staying in an overly powerful state for too long.
+
+\subsubsection{Frost Trap}
+
+Frost Trap is a control-type item. When the player picks up this item, all monsters are immediately frozen for five complete player turns. During the frozen state, monsters cannot move or continue chasing the player.
+
+The main purpose of this item is to provide a short-term safety window for the player. This allows the player to relocate, find a safer path, or collect another item. Since the game can include two monsters at the same time, freezing only one monster may not be enough to help the player escape. Therefore, Frost Trap is designed to freeze all monsters immediately, making it a more effective defensive item in dangerous situations.
+
+To avoid making this item too powerful, the freeze effect does not stack infinitely. If the monsters are already frozen and the player picks up another Frost Trap, the frozen duration will be refreshed or preserved at the maximum value, instead of being added repeatedly. This keeps the item useful while maintaining the challenge of the game.
+
+\subsubsection{Teleport Stone}
+
+Teleport Stone is an emergency escape item. When the player picks up this item, the player is immediately teleported to a safer location on the map. Unlike a purely random teleportation mechanism, the teleportation process in this project considers the positions of the monsters and selects a relatively safe target cell.
+
+The system first checks all valid walkable cells on the map. Invalid positions, such as walls, the current player position, monster positions, active item positions, and active trap positions, are excluded from the candidate list. Then, for each candidate cell, the system calculates its distance to the nearest monster. This distance is used as the safety score of the cell. A larger safety score means that the cell is farther from the closest monster and is therefore safer.
+
+After calculating the safety scores, the candidate cells are sorted according to their safety level. The final teleport target is randomly selected from the top 10\% safest valid cells. This design prevents the player from being teleported into a dangerous area, while still keeping a certain level of randomness in the game.
+
+This mechanism is especially useful in dual-monster mode. Since the safety score is based on the distance to the nearest monster, the selected teleport position must be relatively far from both monsters. As a result, Teleport Stone can help the player escape from situations where the monsters are approaching from different directions.
+
+\subsubsection{Cloak}
+
+Cloak is a stealth-type item. When the player picks up this item, the player becomes invisible for ten complete player turns. During invisibility, monsters cannot detect or capture the player. Instead of using A* Search, Greedy Search, or machine-learning-based prediction to chase the player, the monsters move randomly among valid neighbouring cells.
+
+This design changes the behaviour of the monsters during the invisible state. The monsters are still active in the maze, but they no longer have a clear target. Therefore, the game does not become completely static when the player is invisible. At the same time, even if a monster randomly moves onto the player’s position, the game-over condition will not be triggered while the invisibility effect is active.
+
+The duration of Cloak is also updated based on complete player turns. This is important because Swift Boots may allow the player to perform two movement steps within one turn. In this case, the Cloak duration should still decrease by only one after the whole player turn is completed, rather than decreasing twice. This keeps the time-based logic of all item effects consistent.
+
+After the invisibility duration ends, the monsters return to their normal chasing behaviour, and collision detection becomes active again. Since Cloak can completely prevent the player from being captured for a short period of time, it is designed as a rare and powerful item.
+
+\subsubsection{Item-State Update and Game Balance}
+
+The temporary effects of the items are updated according to the turn-based structure of the game. Swift Boots, Frost Trap, and Cloak all use complete player turns as their duration unit. This means that the item duration is reduced only after the player finishes a full turn, rather than after each single movement step. This rule is necessary to keep the game logic consistent, especially when Swift Boots allows the player to perform two separate movements within one turn.
+
+The item system also improves the balance between the player and the monster agents. The monsters have advantages from search algorithms and prediction models, while the player receives temporary tools for movement, control, teleportation, and invisibility. Therefore, the item system does not remove the challenge of the game. Instead, it gives the player more strategic choices when facing strong monster AI.
+
+Overall, the interactive item system increases the complexity and playability of the game. Swift Boots improves the player’s mobility, Frost Trap provides temporary control over the monsters, Teleport Stone allows emergency repositioning, and Cloak temporarily prevents the monsters from targeting the player. These items work together with the turn-based game logic and make the maze escape process more strategic and dynamic.
+
+\begin{table}[H]
+\centering
+\caption{Summary of Interactive Item Effects}
+\label{tab:item_effects}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{p{3cm} p{3cm} p{8cm}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Effect} \\
+\midrule
+Swift Boots & Mobility & Allows the player to perform two separate one-cell movements per turn for five complete player turns. The two movement steps can be in different directions. \\
+Frost Trap & Control & Immediately freezes all monsters for five complete player turns. Frozen monsters cannot move or continue chasing the player. \\
+Teleport Stone & Escape & Teleports the player to a randomly selected cell from the top 10\% safest valid cells, based on the distance to the nearest monster. \\
+Cloak & Stealth & Makes the player invisible for ten complete player turns. During invisibility, monsters move randomly and cannot capture the player. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{User Interface and Backend Integration}
+
+The entire game interface adopts a unified pixel-art forest theme inspired by the visual style of \textit{Stardew Valley}. Beyond maintaining a consistent visual appearance, the frontend and backend are closely integrated through continuous data synchronization. Every player action sends a request to the Flask backend, which updates the game state and returns serialized data. The frontend then uses this data to refresh and re-render the interface.
+
+The following sections introduce the main interface components and explain how synchronization between the frontend and backend is achieved.
+
+\subsubsection{Pre-Game Pages}
+
+The Index page serves as the main entry point of the game. It features a wooden signboard-style title design and provides three main options: Start Game, Manual, and Exit.
+
+The Manual page provides detailed information about the game, including the differences between the two game modes, control instructions, and the functions of the four available items. To make the information easily accessible during gameplay, players can press the \textbf{M} key on any page to open the Manual as an overlay. This allows them to quickly review the controls and item effects without leaving the current game session.
+
+The Character Selection interface uses a left-right card layout to present the two playable roles: Monster and Human, each illustrated with pixel-style artwork. When the mouse hovers over a character card, the card becomes highlighted, providing visual feedback to indicate the currently selected option. After the player clicks a role, a loading animation is played immediately to enhance immersion.
+
+The Difficulty Selection interface only appears when the player chooses the Human mode, while Monster mode skips this step and enters the game directly. This page follows the same hover-to-highlight interaction pattern as the character selection screen, but uses different highlight colors to distinguish difficulty levels more clearly. After selecting a difficulty, a confirmation popup appears. If the player chooses ``No'', the popup closes and the player remains on the current difficulty selection screen, improving error tolerance and overall user experience.
+
+Although the pre-game interface appears to be mainly based on static visual interactions, it actually relies heavily on backend communication to initialize each game session.
+
+After the player completes the configuration in the Character Selection and Difficulty Selection screens, the frontend sends the selected parameters---such as game mode (\texttt{mode}), opponent AI type (\texttt{opponent\_ai}), and number of monsters---via a POST request to the backend API.
+
+Upon receiving the request, the backend generates a random maze using a dedicated function, initializes the monster pathfinding logic according to the selected difficulty and algorithm type, and sets up the initial positions of both the player and monsters, as well as item distribution across the map.
+
+Once initialization is complete, the backend uses the \texttt{GameState.serialize()} method to convert the entire game state into JSON format and returns it to the frontend. The frontend then renders the initial gameplay screen based on this data.
+
+In this way, the pre-game interaction pages act as a bridge between user configuration and backend session initialization, ensuring that different modes and difficulty levels correctly produce distinct and consistent game environments.
+
+\subsubsection{Gameplay Interface}
+
+The Game page continues the overall pixel-art visual style. The map area on the left is rendered using a Canvas, while static wall elements are pre-rendered using an offscreen canvas to reduce repeated drawing costs in each frame.
+
+Player movement animations are implemented using linear interpolation (lerp) for smooth transitions. During animation playback, an \texttt{inputLocked} state is used to disable new inputs, preventing incoming commands from interrupting ongoing animations.
+
+On the right side, the HUD panel consists of two modules: Game Stats and Item Panel.
+
+The Game Stats module displays real-time information such as the current difficulty level, step counts for both the Human and Monster, and item usage counts. The Item Panel shows four core items as icon cards: Speed Boots, Frost Trap, Teleport Stone, and Invisibility Cloak. Beneath each item card, corresponding status information is displayed, including remaining duration of speed effects, whether the player is currently invisible, remaining frozen turns for the monster, and item respawn cooldown timers. All these values are continuously synchronized from backend state updates, allowing players to understand the game situation clearly without interrupting gameplay.
+
+This interface represents the most interaction-intensive part of the system, where the frontend and backend continuously synchronize in a turn-based manner. In Human mode, each movement command sent by the player includes a direction parameter, which is processed by the backend through the \texttt{apply\_player\_move()} function. The backend first validates whether the target grid is walkable. If the move is valid, it further checks whether an item exists at that location and triggers the corresponding effect.
+
+Due to the presence of the Speed Boots item, the number of movements per turn is not fixed at one step. Instead, the system dynamically determines whether the player can continue moving using state variables such as \texttt{remaining\_player\_steps\_this\_turn} and \texttt{waiting\_for\_second\_step}. These variables control whether the turn should continue or wait for additional input before ending.
+
+Once the player's turn is completed, the backend computes the monster's next position using a pathfinding algorithm based on the selected difficulty. It also updates all time-based effects, such as item duration and freeze counters. The complete updated state is then returned via \texttt{serialize()}, allowing the frontend to refresh both the map and HUD simultaneously.
+
+In comparison, the Monster mode logic is simpler. Since this mode does not involve the item system, each player movement only requires path validation and coordinate updates on the backend. After every two moves, a BFS-based algorithm is triggered to update the human's automated movement. This loop continues until both entities meet, resulting in lower interaction frequency and reduced system complexity compared to Human mode.
+
+Additionally, a collision warning popup is implemented as part of frontend-backend coordination for handling invalid actions. When a player attempts to move into a wall, the backend checks the target grid inside \texttt{move\_one()} and \texttt{move\_human\_with\_items()}. If the move is invalid, the backend returns an error response. The frontend then displays a popup based on this response, turning backend validation results into immediate visual feedback and preventing user confusion caused by unresponsive inputs.
