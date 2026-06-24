@@ -163,28 +163,11 @@ f(n) = g(n) + h(n)
 In the process of the monster moving to the player in each round, the map grid is regarded as an untitled map, thus calculating the path cost. Due to randomly generated roadblocks, each walkable grid cell has up to four neighbors, which can be reached by moving up, down, left or right. When calculating heuristic functions, we use the Manhattan distance between the current cell and the player's location. In addition, because the map has a ring structure, we will apply modular operations to the row index and column index every time we expand the neighbor. This allows movement to cross the grid boundary. After the algorithm is executed, the core function astar(grid, start, goal) will return the full path from the current position of the monster to the player. With each move of the player, the Astar algorithm will calculate the corresponding optimal path. If there is no path (for example, the player is completely surrounded by a wall), the monster will stay in place.
 
 
-\subsubsection{Greedy Search}
-Greedy Search is the basic pursuit strategy used in the \textit{simple} level. 
-At the beginning of each round, the system runs a Breadth-First Search (BFS) 
-from the current player position to construct a distance field. This distance 
-field stores the real grid-step distance from every reachable cell to the player, 
-while considering walls and wrap-around movement.
+\subsubsection{Greedy Search for Monster Movement}
 
-After the distance field is computed, each monster checks all cells that it can 
-move to and selects the cell with the shortest distance to the player. This 
-process is repeated in every round. The system also prevents two monsters from 
-occupying the same cell. If a monster is stuck or no valid BFS path to the player 
-exists, Manhattan distance is used as a fallback heuristic, so that the monster 
-can still make forward progress.
+The Greedy Search is our basic pursuit strategy, which applied in the ``simple'' level. At each beginning of each round, our system will run a BFS computation at the current cell, in order to build a distance filed: the array stores the real distance between player and monster (with grid steps, including the circumstance of walls and wrap-around) to human. After that, each monster check all the cell it can move to, and choose the shortest one, and repeat it again. The system avoid two monster stayed in the same cell. If the monster is stuck, and have no possible way to player, we will use Manhattan distance, so the monster still makes forward progress.
 
-Greedy Search is simple and efficient. In each round, the system only needs to 
-perform one BFS computation and a constant number of comparisons for each monster. 
-However, its main limitation is that the monster behaves passively. It only reacts 
-to the player's current position and cannot predict where the player may move next. 
-Against a clever player, the monster may be trapped or forced into inefficient 
-chasing patterns, which increases the time needed to catch the player. Therefore, 
-Greedy Search serves as a well-known baseline strategy and provides the foundation 
-for more advanced pursuit algorithms.
+The Greedy Search is very speedy and simple, each round and only need to compute BFS once and a constant number of comparison. Its shortcoming is that the monster is totally passive during the game, can not predict where the player would go. Facing the clever player, it would be dumb and be stuck in the trap, so it will be more long for it to catch the player. Hence, the Greedy Search is a well-known basic strategy, the foundation of the higher or cleverer algorithm.
 
 \subsubsection{Simulated Annealing Algorithm}
 
@@ -319,62 +302,22 @@ was required and the selected routes contained no wall visits in these runs.
 These results show that the method is fast enough for interactive play.
 Also, the algorithm can effectively retain safe movement while producing varied routes.
 
-\subsubsection{Minimax Algorithm}
+\subsubsection{Mininax for Predictive Monster AI}
 
-Minimax models the chasing process between the monsters and the player as a 
-zero-sum game. The monsters are treated as the minimizing agent, whose goal is to 
-reduce the distance to the player. The player is treated as the maximizing agent, 
-whose goal is to increase the distance from the monsters.
+Minimax models the chasing process of monster and player as a zero-sum game. The monster as the Min, wanting to shorten the distance between one another, while the player is the Mac, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
 
-The system builds a depth-limited game tree to represent the possible actions of 
-both sides. Following the round-based structure of the game, the monsters first 
-move two steps, and then the player takes one step. This process is repeated for 
-a fixed number of rounds. In our implementation, the default search depth is set 
-to two in order to keep the computation within the available budget.
-
-Leaf nodes are evaluated using an evaluation function based on the distances 
-between the player and all monsters:
+Leaf nodes are calculated by an evaluation functions, which is based on the distance of player to each monsters.
 
 \[
 \text{Eval} = 4 \cdot \min_i d(\text{Human}, \text{Monster}_i)
 + \sum_i d(\text{Human}, \text{Monster}_i)
 \]
 
-In this function, the first term is given a weight of 4 because the nearest 
-monster represents the greatest immediate risk to the player. The summation term 
-encourages all monsters to continue approaching the player, rather than allowing 
-only the closest monster to move effectively. A smaller evaluation score favors 
-the monsters, while a larger score favors the player. If a monster reaches the 
-player's cell, the node returns a large negative score. If the player is caught 
-in fewer steps, the score is made even lower, encouraging the monsters to capture 
-the player as quickly as possible.
+We give the first term as a approximately weight 4, which is the biggest weight as well, since the smallest distance represent the biggest risk. The summation keeps the other monsters moving as well. Small figure favor the monsters, while the big one favor the player. If the monster get the player's cell, the node will return a big negative score, and if the use step is the score is lower, so that the monster will try to use the least step to catch.
 
-Searching the entire game tree is computationally expensive, so several standard 
-optimizations are applied. First, alpha-beta pruning is used to eliminate branches 
-that cannot affect the final decision, thereby reducing the number of nodes that 
-must be searched. Second, a transposition table is used to cache evaluated states. 
-Each state is represented by the player position, the tuple of monster positions, 
-and the current ply index, together with a bound flag. Since the game is played 
-on a wrap-around grid, many states can be reached through different action 
-sequences, so caching helps avoid repeated computation.
+Searching the whole tree is expensive, so we use standard optimizations. First, we use the alpha-beta pruning, to eliminate the branch which is impossible to effect the final decision, so that we can cut down the quantity of the nodes to be searched. Second, we apply the transposition table to cash the result of each evaluated state. With player position, tuple of monsters position, and ply index as keys and all together with a bound flag. Since all in a wrap-around grid, so we can avoid a lot of repeated work and calculation. Third, we use the move ordering to check the most hopeful path first: the path of monster are ordered by increasing distance to player, the path of monster are ordered by decreasing distance to player, and the best path recorded by the transposition table. Good sequence will make the alpha-beta prune much more aggressively and get a better result. After the searching, the chosen sequence of move for current move will be rebuilt from the transposition-table entries and returned through the same interface.
 
-Third, move ordering is applied to improve pruning efficiency. Monster moves are 
-ordered by increasing distance to the player, while player moves are ordered by 
-decreasing distance from the monsters. In addition, the best move recorded in the 
-transposition table is checked first when available. A good move ordering allows 
-alpha-beta pruning to cut branches more aggressively and improves the overall 
-search efficiency. After the search is completed, the selected move sequence for 
-the current turn is reconstructed from the transposition table entries and 
-returned through the same movement interface.
-
-Compared with Greedy Search, Minimax provides predictive behavior. Instead of 
-only following the player's current position, the monsters simulate the player's 
-best possible responses and choose moves that can block escape routes. This makes 
-the monsters more strategic and more difficult to avoid. However, the computational 
-cost of Minimax is much higher, and it increases rapidly with the branching factor 
-and search depth. Therefore, the optimizations described above are essential for 
-making the algorithm practical. In this project, Minimax is used for higher 
-difficulty levels where stronger monster intelligence is required.
+Compared to Greedy Search, Minimax and do predict to the player, more predictable. Since it will modify simulate the best choice made by player, so it will do cut the escape route of the player, but not just follow the player passively. But the cost is high computation, and increasing with branching factor and look-ahead depth. The optimization above is the key factor that make the algorithm into usable. Hence, Minimax will be used in the more difficult level.
 
 \subsection{Machine Learning Dual-Monster Mode}
 
