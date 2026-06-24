@@ -223,10 +223,10 @@ selected within the same 30-position span.
 
 The replacement segment is constructed by a wall-aware greedy search for at
 most 80 steps. At each step, it chooses a walkable neighbour with minimum
-toroidal Manhattan distance to the segment endpoint. Unvisited cells and moves
-that do not immediately backtrack are preferred, while equal candidates are
-shuffled to preserve variation. If the greedy search does not reach the right
-endpoint within its budget, a random toroidal shortest path is appended to
+toroidal Manhattan distance to the segment endpoint. The algorithm prefers unvisited cells and moves
+that do not immediately backtrack. Meanwhile, candidates with the same expected distance
+are shuffled to preserve variation. If the greedy search does not reach the right
+endpoint within a certain number of steps, a random toroidal shortest path is appended to
 close the segment. This closing part may cross walls, but the resulting route
 must remain continuous, start at the monster, end at the human, and contain no
 more than 140 cells. A candidate that fails these structural checks is rejected
@@ -238,9 +238,9 @@ executed in the current turn. The energy minimized by SA is
 \[
 E(P)=|P|+3Dist(p_{\mathrm{move}},h)+Wall(P)+R(P).
 \]
-The path-size term favours short routes, while the larger weight on
-$Dist(p_{\mathrm{move}},h)$ makes the immediate action maintain pursuit
-pressure.
+The path-size term favours short routes, and the larger weight on
+$Dist(p_{\mathrm{move}},h)$ encourages the monster to move towards the human
+to maintain pursuit pressure.
 
 The wall cost distinguishes cells near the executable part of the route from
 those farther in the future:
@@ -252,23 +252,23 @@ Wall(P)=\sum_{i=1}^{n-1}
 0,     & p_i\text{ is walkable.}
 \end{cases}
 \]
-The very large early penalty strongly discourages an illegal current move. The
+The very large early penalty strongly penalizes an illegal current move. The
 smaller later penalty still guides the search towards a fully walkable path,
-but permits SA to pass through temporarily poor intermediate states. Because a
-new route is planned every turn, the first six steps are more important than a
-distant suffix that may never be executed.
+while also permits SA to pass through temporarily poor intermediate states. Because a
+new route is planned every turn, the first six steps are attached more importance than a
+distant suffix that may not be executed instantly.
 
-The final term reduces visible oscillation between turns:
+The final term reduces visible repeatation between turns:
 \[
 R(P)=10I(p_{\mathrm{move}}=p_{\mathrm{prev,start}}),
 \]
-where $p_{\mathrm{prev,start}}$ is the monster position at the beginning of
-the previous SA move. The game backend records the previous movement and passes
+where $p_{\mathrm{prev,start}}$ denotes the monster position at the beginning of
+the previous round. The game backend records the previous movement and passes
 it to the C++ planner on the next turn. Thus, returning immediately to the
-previous starting cell is discouraged without preventing the monster from
+previous position is discouraged without preventing the monster from
 continuing a useful direction of pursuit.
 
-For a candidate $P'$, an improvement is always accepted. A worse candidate is
+A candidate $P'$ with improvement is always accepted. A worse candidate might also be
 accepted with probability
 \[
 \Pr(P\rightarrow P')=
@@ -276,8 +276,8 @@ accepted with probability
 \]
 This permits broad exploration at high temperature and increasingly selective
 search as the temperature falls. The implementation also tracks the best
-accepted route whose first two steps are both adjacent and walkable. That route
-is preferred to a lower-scoring route that the monster cannot execute safely.
+accepted route whose first two steps are both walkable. That route
+is prefered over a lower-scoring route that the monster cannot execute safely.
 
 \begin{table}[H]
 \centering
@@ -303,23 +303,21 @@ Maximum candidate path size & 140 cells \\
 
 With these defaults, the temperatures are $80,80(0.94),80(0.94)^2,\ldots$
 while $T>0.5$. This gives 83 temperature levels and $83\times20=1660$
-candidate mutations per call. The parameters can also be overridden from the
-command line, and a fixed random seed can be supplied for reproducible tests.
+candidate mutations per call. 
 
-After annealing, the monster uses the best accepted route with legal first
+After annealing, the monster chooses the best accepted route with legal first
 steps. If no such route is found, a wall-aware toroidal BFS constructs a safe
-fallback path. The selected route is checked once more before output, ensuring
-that the monster never finishes its turn inside a wall even though SA is
+fallback path. The selected route is checked again before output, ensuring
+that the monster never crosses the wall even though SA is
 allowed to evaluate wall-crossing candidates during the search.
 
-The current configuration was selected from the obstacle-penalty SA experiment.
-On five held-out generated maps with five fixed random seeds per map, it caught
-the human in 24 of 25 games. Its mean planning time was $6.72$ ms, the 95th
+The current configuration was chosen based on an ablation experiment.
+We tested the algorithm on five generated maps with five fixed random seeds per map,
+it caught the human in 24 of 25 games. Its mean planning time was $6.72$ ms, the 95th
 percentile was $10.16$ ms, and the maximum was $12.35$ ms. No BFS fallback
 was required and the selected routes contained no wall visits in these runs.
-These results do not prove global optimality, but they show that the method is
-fast enough for interactive play and that the penalty-based search can retain
-safe movement while producing varied routes.
+These results show that the method is fast enough for interactive play.
+Also, the algorithm can effectively retain safe movement while producing varied routes.
 
 \subsubsection{Minimax Algorithm}
 
@@ -782,15 +780,15 @@ The ablation study (Figure~\ref{fig:ml_ablation}) confirms the importance of rat
 
 \subsection{Achievements}
 
-The project successfully implemented a Flask game backend that supports an in-memory multi-game session architecture utilizing unique \texttt{game\_id} tracking. It features two distinct interactive gameplay modes: an Escape mode where the player evades various AI algorithms, and a Chase mode where the player actively hunts a BFS-controlled human. For map creation, a C++ Genetic Algorithm was integrated to procedurally generate 30 x 30 wrap-around mazes, optimizing fitness functions based on four main factors: reachability, wall ratio, junction complexity, and path distance. The system deployed a robust suite of pathfinding algorithms, including A* for multi-monster tracking, a Greedy controller, a Minimax controller utilizing Alpha-Beta pruning, and Simulated Annealing with lightweight game-play heuristics. On the frontend, a custom HTML5 Canvas-based UI featuring retro pixel-art aesthetics, dynamic keyframe animations, and an interactive HUD was designed to successfully bridge the visual presentation with the backend RESTful APIs. Furthermore, an automated compilation pipeline was established within the Flask backend to dynamically detect compilers (such as g++, clang++, or c1) and build necessary C++ executables on demand without crashing the web application.
+The project successfully implemented Flask game backend that support an in-memory multi-game session architecture utilizing unique \texttt{game\_id} tracking. It features two distinct interactive gameplay modes: an Escape mode where the player evades various AI algorithms, and a Chase mode where the player actively hunt a BFS-controlled human. For map creation, a C++ Genetic Algorithm was integrated to procedurally generate 30 x 30 wrap-around maze, optimizing fitness functions based on four main factors: reachability, wall ratio, junction complexity, and path distance. The system deployed a robust suite of pathfinding algorithms, including A* for multi-monster tracking, a Greedy controller, a Minimax controller utilizing Alpha-Beta pruning, and Simulated Annealing with lightweight game-play heuristics. On the frontend, a custom HTML5 Canvas-based UI featuring retro pixel-art aesthetics, dynamic keyframe animations, and an interactive HUD is designed to successfully bridge the visual presentation with the backend RESTful APIs. Furthermore, a automated compilation pipeline is established within the Flask backend to dynamically detect compilers (such as g++, clang++, or c1) and build necessary C++ executables on demand without crash the web application.
 
 \subsection{Limitations}
 
-Despite these achievements, several algorithmic and computational constraints remain. Simulated Annealing (SA) exhibits a high degree of behavioral randomness in real-time chase scenarios (achieving only an 83.3\% capture rate) and suffers from high latency, with decision times reaching 9.99ms. While Minimax offers the highest capture efficiency (averaging 20.5 steps), its lookahead search results in a decision overhead of 0.62ms---significantly higher than A* (0.0511ms)---posing scalability bottlenecks for more complex mazes. Furthermore, deterministic algorithms like A* and Greedy lack the evolutionary ability to dynamically learn from and adapt to variable human escape strategies. The current predictive modeling also lacks spatiotemporal dynamic feature fusion. It relies heavily on absolute positions (e.g., \texttt{human\_col}, \texttt{human\_row}) and brief step histories (e.g., \texttt{prev\_down\_1}), failing to model the player's long-term global strategic intentions. Additionally, environmental feature representation is overly restricted to immediate local wall constraints (\texttt{wall\_up}, \texttt{wall\_down}), completely missing macro-topological influences such as distant dead-ends and bifurcations. Finally, the integration of C++ algorithms currently relies on reading and writing to a temporary physical text file (\texttt{map/generated\_map.txt}), introducing disk I/O bottlenecks during active web play. Additionally, the procedural map generation via Genetic Algorithms is computationally demanding and blocks the server terminal temporarily, causing delays during session initialization.
+Despite these achievements, several algorithmic and computational constraints remain. Simulated Annealing (SA) exhibit a high degree of behavioral randomness on real-time chase scenario (achieving only a 83.3\% capture rate) and suffer from high latency, with decision times reaching 9.99ms. While Minimax offers the highest capture efficiency (averaging 20.5 steps), its lookahead search results in a decision overhead of 0.62ms---significantly higher than A* (0.0511ms)---posing scalability bottlenecks for more complex mazes. Furthermore, deterministic algorithms like A* and Greedy lack the evolutionary ability to dynamically learn from and adapt to variable human escape strategies. The current predictive modeling also lack spatiotemporal dynamic feature fusion. It relies heavily on absolute positions (e.g., \texttt{human\_col}, \texttt{human\_row}) and brief step historie (e.g., \texttt{prev\_down\_1}), failing to model the player's long-term global strategic intentions. Additionally, environmental feature representation is overly restricted to immediate local wall constraints (\texttt{wall\_up}, \texttt{wall\_down}), completely missing macro-topological influences such as distant dead-ends and bifurcations. Finally, the integration of C++ algorithms currently relies on reading and writing to a temporary physical text file (\texttt{map/generated\_map.txt}), introducing disk I/O bottlenecks during active web play. Additionally, the procedural map generation via Genetic Algorithms is computationally demanding and block the server terminal temporarily, causing delays during session initialization.
 
 \subsection{Future Work}
 
-Future work will focus on advanced machine learning integration by enhancing the feature engineering pipeline to capture macro-topological maze structures (e.g., dead-ends, chokepoints) and temporal sequence data. Introducing Reinforcement Learning (such as Q-Learning) could empower the monster AI to dynamically adapt to player strategies rather than relying on static heuristics. For system and architecture optimization, the execution of C++ algorithms will transition from disk-based file I/O to direct memory bindings or standard streams to eliminate temporary file dependencies during active gameplay. Additionally, upgrading the HTTP polling mechanism to WebSockets would enable seamless, real-time bidirectional communication and pave the way for PvP multiplayer. Finally, game rules will be expanded to support maze layouts with defined exit tiles, providing a definitive victory condition for the human player beyond simply maximizing survival duration. Furthermore, the Genetic Algorithm can be optimized to significantly reduce server-side processing times for initial maze generation.
+Future work will be focused on advanced machine learning integration by enhancing the feature engineering pipeline to capture macro-topological maze structures (e.g., dead-ends, chokepoints) and temporal sequence data. Introducing Reinforcement Learning (such as Q-Learning) can empower the monster AI to dynamically adapt to player strategies rather than relying on static heuristics. For system and architecture optimization, the execution of C++ algorithm will transition from disk-based file I/O to direct memory binding or standard stream to eliminate temporary file dependencies during active gameplay. Moreover, upgrading the HTTP polling mechanism to WebSockets would enable seamless, realtime bidirectional communication and pave the way for PvP multiplayer. Finally, game rules will be expanded to support maze layouts with defined exit tiles, providing a definitive victory condition for the human player beyond simply maximizing survival duration. Furthermore, the Genetic Algorithm can be optimized to significantly reduce server-side processing times for initial maze generation.
 
 \begin{thebibliography}{9}
 
