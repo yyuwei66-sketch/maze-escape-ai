@@ -61,16 +61,23 @@ Present but still empty / placeholder:
 ### Genetic Algorithm Map Generation
 
 `ai/genetic_map.cpp` generates random candidate maps and improves them over
-multiple generations. The fitness function rewards:
+multiple generations. For every new game, Flask creates a 64-bit seed with
+Python's cryptographically secure `secrets` module and invokes the generator as
+`genetic_map --seed <seed>`. Supplying the same seed directly reproduces the
+same GA result; different game requests receive different seeds. The fitness
+function rewards:
 
 - high connectivity between floor cells
 - a wall ratio close to the target density
 - useful junctions and branching paths
 - reasonable average path distances
 
-The Flask backend compiles the program on demand and runs it in a temporary
-directory. It reads the generated 30 x 30 grid and spawn coordinates without
-modifying the repository's `map/generated_map.txt`.
+The Flask backend compiles the program on demand and runs it in a fresh temporary
+directory. Every invocation writes a new temporary `map/generated_map.txt`, which
+is immediately read into that game's independent grid state; the repository's
+`map/generated_map.txt` is neither reused nor modified. If a generated layout
+duplicates a currently active game's layout, Flask retries with a new seed up to
+four times.
 
 The human and monster spawn 30 to 40 BFS steps apart when a matching connected
 pair is found.
@@ -293,7 +300,9 @@ The page has two entry points:
   with BFS after every two monster moves.
 
 Each new game runs the bundled C++ Genetic Algorithm to generate a fresh
-30 x 30 map and spawn coordinates.
+30 x 30 map and spawn coordinates. The create-game response includes the
+`map_seed` used by C++ as well as the new `grid`, so the play UI renders the map
+returned for that specific `game_id`.
 
 Map generation prints GA progress in the server terminal and can take a moment.
 

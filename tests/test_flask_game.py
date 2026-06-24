@@ -20,6 +20,7 @@ def wall_grid():
 class FlaskGameTest(unittest.TestCase):
     def setUp(self):
         main.games.clear()
+        main._generated_map_hashes.clear()
         self.client = main.app.test_client()
 
     def make_game(self, payload, grid=None, spawns=((0, 0), (0, 5))):
@@ -62,6 +63,72 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(data["mode"], "chase")
         self.assertEqual(data["opponent_ai"], "bfs")
         self.assertEqual(len(data["monsters"]), 1)
+
+    def test_new_games_use_unique_seeds_maps_and_grid_objects(self):
+        first_grid = open_grid()
+        second_grid = open_grid()
+        first_grid[1][1] = 1
+        second_grid[2][2] = 1
+
+        with (
+            patch("main.secrets.randbits", side_effect=[101, 202]),
+            patch(
+                "main.run_cpp_genetic_map",
+                side_effect=[
+                    (first_grid, (0, 0), (0, 5)),
+                    (second_grid, (0, 0), (0, 5)),
+                ],
+            ) as generator,
+        ):
+            first = self.client.post("/api/games", json={"mode": "chase"})
+            second = self.client.post("/api/games", json={"mode": "chase"})
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        first_data = first.get_json()
+        second_data = second.get_json()
+        self.assertNotEqual(first_data["grid"], second_data["grid"])
+        self.assertEqual(first_data["map_seed"], 101)
+        self.assertEqual(second_data["map_seed"], 202)
+        generator.assert_any_call(seed=101)
+        generator.assert_any_call(seed=202)
+
+        first_game = main.games[first_data["game_id"]]
+        second_game = main.games[second_data["game_id"]]
+        self.assertIsNot(first_game.grid, second_game.grid)
+        self.assertIsNot(first_game.grid[0], second_game.grid[0])
+
+    def test_duplicate_generated_layout_is_retried(self):
+        duplicate_grid = open_grid()
+        unique_grid = open_grid()
+        unique_grid[3][3] = 1
+
+        existing = main.GameState(
+            grid=[list(row) for row in duplicate_grid],
+            human=(0, 0),
+            human_spawn=(0, 0),
+            monsters=[(0, 5)],
+            mode="chase",
+            opponent_ai="bfs",
+        )
+        main.games[existing.game_id] = existing
+        main._generated_map_hashes.add(main.map_layout_hash(existing.grid))
+
+        with (
+            patch("main.secrets.randbits", side_effect=[303, 404]),
+            patch(
+                "main.run_cpp_genetic_map",
+                side_effect=[
+                    (duplicate_grid, (0, 0), (0, 5)),
+                    (unique_grid, (0, 0), (0, 5)),
+                ],
+            ) as generator,
+        ):
+            response = self.client.post("/api/games", json={"mode": "chase"})
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["map_seed"], 404)
+        self.assertEqual(generator.call_count, 2)
 
     def test_invalid_move_returns_400(self):
         response = self.make_game(

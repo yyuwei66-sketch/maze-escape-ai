@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+import hashlib
 import math
 import random
+import secrets
+import threading
 from typing import Any, Dict, List, Sequence, Tuple
 import uuid
 
@@ -73,6 +76,9 @@ except Exception as exc:
     print("Human direction predictor not loaded:", exc)
 
 games: Dict[str, "GameState"] = {}
+MAP_GENERATION_ATTEMPTS = 4
+_generated_map_hashes: set[str] = set()
+_map_hash_lock = threading.Lock()
 
 
 @dataclass
@@ -122,10 +128,12 @@ class GameState:
     human_direction_history: List[str] = field(default_factory=list)
     turn_messages: List[str] = field(default_factory=list)
     turn_picked_items: List[ItemKind] = field(default_factory=list)
+    map_seed: int | None = None
 
     def serialize(self) -> dict[str, Any]:
         return {
             "game_id": self.game_id,
+            "map_seed": self.map_seed,
             "grid": self.grid,
             "human": pos_to_json(self.human),
             "monsters": [
@@ -312,7 +320,7 @@ def parse_genetic_map_from_debug_output(debug_text: str) -> tuple[List[List[int]
     return grid, human, monster
 
 
-def load_genetic_map() -> tuple[List[List[int]], Pos, Pos]:
+def load_genetic_map(seed: int) -> tuple[List[List[int]], Pos, Pos]:
     """
     Load the map from the C++ genetic generator.
 
@@ -324,9 +332,31 @@ def load_genetic_map() -> tuple[List[List[int]], Pos, Pos]:
         printed a complete visual map, parse that output instead.
     """
     try:
-        return run_cpp_genetic_map()
+        return run_cpp_genetic_map(seed=seed)
     except CppAlgorithmError as exc:
         return parse_genetic_map_from_debug_output(str(exc))
+
+
+def map_layout_hash(grid: Sequence[Sequence[int]]) -> str:
+    """Return a stable hash for duplicate-layout detection."""
+    encoded = "\n".join("".join(str(int(cell)) for cell in row) for row in grid)
+    return hashlib.sha256(encoded.encode("ascii")).hexdigest()
+
+
+def generate_unique_game_map() -> tuple[List[List[int]], Pos, Pos, int]:
+    """Generate a map not currently used by another in-memory game."""
+    for _ in range(MAP_GENERATION_ATTEMPTS):
+        seed = secrets.randbits(64)
+        grid, human, monster = load_genetic_map(seed)
+        layout_hash = map_layout_hash(grid)
+        with _map_hash_lock:
+            if layout_hash in _generated_map_hashes:
+                continue
+            _generated_map_hashes.add(layout_hash)
+            return grid, human, monster, seed
+    raise ValueError(
+        f"map generator returned a duplicate layout {MAP_GENERATION_ATTEMPTS} times"
+    )
 
 
 def create_game(payload: dict[str, Any]) -> GameState:
@@ -349,7 +379,7 @@ def create_game(payload: dict[str, Any]) -> GameState:
         opponent_ai = CHASE_AI
         monster_count = 1
 
-    grid, human, first_monster = load_genetic_map()
+    grid, human, first_monster, map_seed = generate_unique_game_map()
     monsters = [first_monster]
     while len(monsters) < monster_count:
         extra = find_extra_monster_spawn(grid, human, monsters)
@@ -365,6 +395,7 @@ def create_game(payload: dict[str, Any]) -> GameState:
         mode=mode,
         opponent_ai=opponent_ai,
         monster_frozen_turns=[0 for _ in monsters],
+        map_seed=map_seed,
     )
     if mode == "escape":
         spawn_random_items(game, int(payload.get("item_count", ITEM_SPAWN_COUNT)))

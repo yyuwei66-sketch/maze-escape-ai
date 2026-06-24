@@ -456,8 +456,6 @@ where $p_t$ denotes the player's current coordinate, and $\hat{d}_{t+1}$, $\hat{
 
 \subsection{Interactive Item System}
 
-\subsection{Interactive Item System}
-
 The item system within this project was designed as a significant component of the game logic, rather than merely a decoration on the map. Since the monsters can chase the player using algorithms such as A* Search, Greedy Search, and machine-learning-based prediction models, the game would become too difficult if the player could only move one step per turn. Therefore, the main purpose of the item system is to provide short-term escaping, defensive, and repositioning abilities, which improves the playability and balance of the game.
 
 This system includes four items: \textbf{Swift Boots, Frost Trap, Teleport Stone, and Cloak}. These four items affect the player’s movement ability, the monsters’ movement status, the player’s location, and the monster-chasing logic respectively. All item effects are integrated with the turn-based movement system. In most cases, the duration of an item effect is updated based on a complete player turn, rather than based on a single movement cell.

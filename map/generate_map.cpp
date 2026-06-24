@@ -7,6 +7,8 @@
 #include <fstream>
 #include <cmath>
 #include <chrono>
+#include <cstdint>
+#include <stdexcept>
 
 using namespace std;
 
@@ -26,11 +28,27 @@ struct ScoredMap {
     vector<vector<int>> grid;
 };
 
-mt19937 rng(
-    static_cast<unsigned long long>(
+mt19937 rng;
+
+
+void seedRng(uint64_t seed) {
+    seed_seq sequence{
+        static_cast<uint32_t>(seed),
+        static_cast<uint32_t>(seed >> 32)
+    };
+    rng.seed(sequence);
+}
+
+
+uint64_t makeDynamicSeed() {
+    random_device device;
+    const uint64_t clockValue = static_cast<uint64_t>(
         chrono::high_resolution_clock::now().time_since_epoch().count()
-    ) ^ random_device{}()
-);
+    );
+    return clockValue
+        ^ (static_cast<uint64_t>(device()) << 32)
+        ^ static_cast<uint64_t>(device());
+}
 
 
 int randomInt(int low, int high) {
@@ -512,12 +530,29 @@ void printMap(
 }
 
 
-int main() {
+int main(int argc, char* argv[]) {
+    uint64_t seed = makeDynamicSeed();
+    try {
+        if (argc == 2) {
+            seed = stoull(argv[1]);
+        } else if (argc == 3 && string(argv[1]) == "--seed") {
+            seed = stoull(argv[2]);
+        } else if (argc != 1) {
+            cerr << "Usage: generate_map [--seed SEED]" << endl;
+            return 2;
+        }
+    } catch (const exception& exc) {
+        cerr << "Invalid seed: " << exc.what() << endl;
+        return 2;
+    }
+    seedRng(seed);
+    cout << "Seed: " << seed << endl;
+
     vector<vector<int>> generatedMap = generateMapGA(
         30,
         20,
-        0.01,
-        5
+        0.015,
+        3
     );
 
     auto spawnPoints = getValidSpawnPoints(generatedMap);

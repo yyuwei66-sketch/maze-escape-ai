@@ -196,8 +196,13 @@ def run_cpp_map_algorithm(
         return spawns[0], spawns[1]
 
 
-def run_cpp_genetic_map() -> tuple[list[list[int]], Pos, Pos]:
-    """Generate a map and spawn points with the bundled C++ GA program."""
+def run_cpp_genetic_map(seed: int | None = None) -> tuple[list[list[int]], Pos, Pos]:
+    """Generate a map and spawn points with the bundled C++ GA program.
+
+    ``seed`` is passed explicitly so callers can request either a unique map or
+    deterministic reproduction. The C++ program supplies its own strong seed
+    only when this argument is omitted.
+    """
 
     executable = ensure_cpp_executable("genetic_map")
 
@@ -207,8 +212,14 @@ def run_cpp_genetic_map() -> tuple[list[list[int]], Pos, Pos]:
         map_dir.mkdir()
         map_path = map_dir / "generated_map.txt"
 
+        command = [str(executable)]
+        if seed is not None:
+            if not 0 <= seed <= (2**64 - 1):
+                raise ValueError("genetic map seed must be an unsigned 64-bit integer")
+            command.extend(("--seed", str(seed)))
+
         result = subprocess.run(
-            [str(executable)],
+            command,
             cwd=root,
             capture_output=True,
             text=True,

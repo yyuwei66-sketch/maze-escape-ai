@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import hashlib
 import unittest
 from pathlib import Path
 import tempfile
@@ -65,9 +66,9 @@ class CppPortabilityTest(unittest.TestCase):
                 "g++",
                 "-O2",
                 "-std=c++17",
-                "/project/ai/SA.cpp",
+                str(Path("/project/ai/SA.cpp")),
                 "-o",
-                "/project/ai/SA",
+                str(Path("/project/ai/SA")),
             ],
         )
 
@@ -135,6 +136,7 @@ class CppPortabilityTest(unittest.TestCase):
                 sa_previous_move=previous_move,
                 bfs_previous_human=previous_human,
             )
+
             ai.run_cpp_map_algorithm(
                 "bfs",
                 grid,
@@ -154,6 +156,54 @@ class CppPortabilityTest(unittest.TestCase):
             write_map.call_args_list[1].kwargs["bfs_previous_human"],
             previous_human,
         )
+
+    def test_run_cpp_genetic_map_passes_seed_argument(self):
+        completed = SimpleNamespace(returncode=0, stderr="", stdout="")
+        grid = [[0 for _ in range(ai.WIDTH)] for _ in range(ai.HEIGHT)]
+
+        def create_generated_map(command, cwd, **kwargs):
+            map_path = Path(cwd) / "map" / "generated_map.txt"
+            map_path.write_text("placeholder", encoding="utf-8")
+            return completed
+
+        with (
+            patch("ai.ensure_cpp_executable", return_value=Path("genetic_map")),
+            patch("ai.subprocess.run", side_effect=create_generated_map) as run,
+            patch("ai._read_genetic_map", return_value=(grid, (0, 0), (0, 5))),
+        ):
+            result = ai.run_cpp_genetic_map(seed=123456789)
+
+        self.assertEqual(result, (grid, (0, 0), (0, 5)))
+        self.assertEqual(run.call_args.args[0][-2:], ["--seed", "123456789"])
+
+    def test_genetic_map_seed_reproduction_diversity_and_playability(self):
+        repository_map = Path("map/generated_map.txt")
+        original_map = (
+            repository_map.read_bytes() if repository_map.exists() else None
+        )
+
+        first = ai.run_cpp_genetic_map(seed=987654321)
+        repeated = ai.run_cpp_genetic_map(seed=987654321)
+        different = ai.run_cpp_genetic_map(seed=987654322)
+
+        def layout_hash(result):
+            grid, _, _ = result
+            return hashlib.sha256(
+                bytes(cell for row in grid for cell in row)
+            ).digest()
+
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(layout_hash(first), layout_hash(different))
+        for grid, human, monster in (first, repeated, different):
+            self.assertTrue(ai.astar(grid, monster, human))
+            wall_ratio = sum(sum(row) for row in grid) / (ai.WIDTH * ai.HEIGHT)
+            self.assertGreater(wall_ratio, 0.15)
+            self.assertLess(wall_ratio, 0.40)
+
+        if original_map is None:
+            self.assertFalse(repository_map.exists())
+        else:
+            self.assertEqual(repository_map.read_bytes(), original_map)
 
     def test_sa_moves_when_a_path_exists_on_branchy_map(self):
         raw_grid = [
