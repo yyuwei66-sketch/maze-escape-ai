@@ -467,24 +467,14 @@ At first, we only tested the normal chasing logic. However, in the two-monster m
 
 We also considered whether freezing only one monster would be enough, but this did not work well in the dual-monster mode. The other monster could still move closer to the player, so the player might still be caught quickly. Therefore, we finally made Frost Trap affect all monsters at the same time. To prevent this item from becoming too strong, the frozen time is not accumulated without limit when the player picks up Frost Trap multiple times. Instead, the game refreshes the counter or keeps the larger frozen value.
 \subsubsection{Frost Trap}
-At first, Teleport Stone could be designed as a fully random teleportation item, but we thought this was not stable. This is because the random position could still be close to the monsters, or even teleport the player to a more dangerous position. Therefore, we did not simply choose a grid randomly. Instead, the program goes through all the grids on the map.
+At first, we only tested the normal chasing logic. However, in the two-monster mode, the player could be easily caught by two monsters. Therefore, we decided to design an item called Frost Trap. In the implementation, we did not simply pause the whole game. Instead, we saved a frozen counter for every monster individually. After the player picks up this item, every monster's counter is set to 5. Every time a monster prepares to move, the program first checks this value. If the value is larger than zero, the monster cannot move in this turn. After the player finishes a complete turn, the counter decreases by one.
 
-
-
-The program first excludes positions that cannot be used as teleport targets, such as walls, the current position of the player, monster positions, active item positions, and trap positions. The remaining grids are then added to the candidate list. After that, we calculate the distance from each candidate grid to the nearest monster. This distance is used as the safety score of the position. If the distance is larger, it means that the position is safer.
-
-
-
-Finally, we do not directly choose the farthest grid, because the result would be too fixed. Instead, we randomly choose one position from the top $10\%$ safest positions. In this way, the player has a high probability of being teleported to a safe area, but the result still keeps some randomness.
+We also considered whether freezing only one monster would be enough, but the effect was not good in the dual-monster mode, because the other monster could still move close to the player. Therefore, we finally made Frost Trap affect all monsters at the same time. To avoid making this item too strong, when the player picks up this item several times, the frozen time will not be accumulated without limit. Instead, we refresh the counter or keep the larger frozen value.
 \subsubsection{Teleport Stone}
 
-Teleport Stone is used as an emergency repositioning item. We did not use a fully random teleport method, because a random cell may still be close to a monster or even place the player in another dangerous area. To make the item more useful, the teleport position is selected according to the current monster positions.
-
-When the item is triggered, the program first scans the map and collects possible target cells. A valid target must be a walkable cell. It also cannot be the player’s current position, a monster position, an active item position, or an active trap position. After removing these invalid choices, the program calculates the distance from each remaining cell to the nearest monster.
-
-This distance is used as the safety value of the cell. A larger distance means that the cell is safer for the player. However, we do not always choose the single farthest cell, because that would make the teleport result too fixed. Instead, the game selects one cell randomly from the top $10\%$ safest valid positions. This keeps the teleport effect useful while still leaving some uncertainty in the result.
-
-This design is especially important when there are two monsters. If the player only moves away from one monster, the other monster may still be nearby. Since the safety value is based on the nearest monster, the selected teleport cell usually avoids being too close to either monster. As a result, Teleport Stone gives the player a better chance to escape when the monsters approach from different directions. This gives the player a better chance to escape when the monsters are coming from different sides.
+At first, Teleport Stone could be designed as a fully random teleportation item, but we thought this was not stable. This is because the random position could still be close to the monsters, or even teleport the player to a more dangerous position. Therefore, we did not simply choose a grid randomly. Instead, the program goes through all the grids on the map.
+The program first excludes positions that cannot be used as teleport targets, such as walls, the current position of the player, monster positions, active item positions, and trap positions. The remaining grids are then added to the candidate list. After that, we calculate the distance from each candidate grid to the nearest monster. This distance is used as the safety score of the position. If the distance is larger, it means that the position is safer.
+Finally, we do not directly choose the farthest grid, because the result would be too fixed. Instead, we randomly choose one position from the top $10\%$ safest positions. In this way, the player has a high probability of being teleported to a safe area, but the result still keeps some randomness.
 
 \subsubsection{Cloak}
 
@@ -520,6 +510,7 @@ Cloak & Stealth & Makes the player invisible for ten complete player turns. Duri
 \bottomrule
 \end{tabular}
 \end{table}
+
 
 \subsection{User Interface and Backend Integration}
 
