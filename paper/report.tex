@@ -117,7 +117,7 @@ The following chapters of this report will introduce in detail the design and sp
 
 \subsection{Genetic Algorithm for Map Generation}
 
-In this project, we automatically generate the map through a genetic algorithm rather than designing it manually. The purpose of this module is not simply to place obstacles randomly, but to generate a 30 × 30 map that is suitable for a chase-based game. Therefore, we need the map to satisfy connectivity, playability, and chase balance at the same time. If the map is too open, the monster can chase the player too easily. If there are too many obstacles, the movement space of both the player and the monster will be severely restricted. In some extreme cases, the player and the monster may even be separated into unreachable areas. Therefore, we design the map generation process to balance randomness and playability.
+In this project, we automatically generate the map through a genetic algorithm rather than designing it manually \cite{holland1975genetic,goldberg1989genetic}. The purpose of this module is not simply to place obstacles randomly, but to generate a 30 × 30 map that is suitable for a chase-based game. Therefore, we need the map to satisfy connectivity, playability, and chase balance at the same time. If the map is too open, the monster can chase the player too easily. If there are too many obstacles, the movement space of both the player and the monster will be severely restricted. In some extreme cases, the player and the monster may even be separated into unreachable areas. Therefore, we design the map generation process to balance randomness and playability.
 
 In the implementation, we model the map as a 30 × 30 two-dimensional grid, and every cell is represented using binary values. 0 symbolizes walkable ground, while 1 symbolizes obstacles and walls. Players and monsters can only move on walkable cells. Besides, we design the map with a wrap-around boundary. This means that when a character moves out from one side of the map, it will appear again from the opposite side. Because of this mechanism, modulus operation is used when calculating neighbouring positions. BFS can also be applied based on this wrap-around structure to check map connectivity and calculate the path distance between the player and the monster.
 
@@ -142,7 +142,7 @@ At the end, the map with the highest fitness score is saved as a text file. The 
 \subsection{Human AI Algorithm (BFS)}
 
 When the user plays the role of monster, 
-a Breadth-First Search(BFS)-based system is used to control the human character. 
+a Breadth-First Search(BFS)-based system is used to control the human character \cite{russell2020aima}. 
 Generally, the objective of the human character is to keep as far away from the monster as possible.
 Therefore, every time when the Human AI needs to decide its move direction,
 we run BFS starting from the monster's current position.
@@ -161,7 +161,7 @@ that is farthest away in terms of actual maze path distance.
 
 \subsubsection{A* Search Algorithm}
 
-A* is a heuristic graph search algorithm. It finds the shortest path between two nodes by adding the cost of the lined path to the residual cost estimate of reaching the target node. The cost of each node is calculated by the following function:
+A* is a heuristic graph search algorithm \cite{hart1968astar}. It finds the shortest path between two nodes by adding the cost of the lined path to the residual cost estimate of reaching the target node. The cost of each node is calculated by the following function:
 
 \[
 f(n) = g(n) + h(n)
@@ -172,14 +172,14 @@ In the process of the monster moving to the player in each round, the map grid i
 
 \subsubsection{Greedy Search for Monster Movement}
 
-The Greedy Search is our basic pursuit strategy, which applied in the ``simple'' level. At each beginning of each round, our system will run a BFS computation at the current cell, in order to build a distance filed: the array stores the real distance between player and monster (with grid steps, including the circumstance of walls and wrap-around) to human. After that, each monster check all the cell it can move to, and choose the shortest one, and repeat it again. The system avoid two monster stayed in the same cell. If the monster is stuck, and have no possible way to player, we will use Manhattan distance, so the monster still makes forward progress.
+The Greedy Search is our basic pursuit strategy, which applied in the ``simple'' level \cite{russell2020aima}. At each beginning of each round, our system will run a BFS computation at the current cell, in order to build a distance filed: the array stores the real distance between player and monster (with grid steps, including the circumstance of walls and wrap-around) to human. After that, each monster check all the cell it can move to, and choose the shortest one, and repeat it again. The system avoid two monster stayed in the same cell. If the monster is stuck, and have no possible way to player, we will use Manhattan distance, so the monster still makes forward progress.
 
 The Greedy Search is very speedy and simple, each round and only need to compute BFS once and a constant number of comparison. Its shortcoming is that the monster is totally passive during the game, can not predict where the player would go. Facing the clever player, it would be dumb and be stuck in the trap, so it will be more long for it to catch the player. Hence, the Greedy Search is a well-known basic strategy, the foundation of the higher or cleverer algorithm.
 
 \subsubsection{Simulated Annealing Algorithm}
 
 At the third difficulty level, Simulated Annealing (SA) is used to plan the
-monster's movement. Unlike A* or BFS, SA does not require every intermediate
+monster's movement \cite{kirkpatrick1983sa}. Unlike A* or BFS, SA does not require every intermediate
 candidate to be a wall-free shortest path. Instead, it searches over complete,
 continuous routes from the monster to the human and assigns large costs to
 routes that cross walls. This representation makes mutations inexpensive while
@@ -311,7 +311,7 @@ Also, the algorithm can effectively retain safe movement while producing varied 
 
 \subsubsection{Minimax for Predictive Monster AI}
 
-Minimax models the chasing process of monster and player as a zero-sum game. The monster as the Min, wanting to shorten the distance between one another, while the player is the Mac, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
+Minimax models the chasing process of monster and player as a zero-sum game \cite{knuth1975alphabeta,russell2020aima}. The monster as the Min, wanting to shorten the distance between one another, while the player is the Mac, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
 
 Leaf nodes are calculated by an evaluation functions, which is based on the distance of player to each monsters.
 
@@ -365,7 +365,7 @@ Compared to Greedy Search, Minimax and do predict to the player, more predictabl
 }
 \end{lstlisting}
 
-To achieve efficient collaborative pursuit in the dual-monster mode, this project introduces a machine learning approach to predict the human player's next movement direction. Given that the game map represents a non-linear discrete space, we selected a Random Forest classifier to construct the predictive model . The training data was collected entirely through real gameplay testing conducted by our group members, resulting in a total of 4,206 data entries saved in JSONL format. Each line represents a player decision sample containing the current state features and the ground-truth movement label. Based on this dataset, to minimize the parameter count while preserving high-quality characteristics, the model extracts and learns three core categories of features: 
+To achieve efficient collaborative pursuit in the dual-monster mode, this project introduces a machine learning approach to predict the human player's next movement direction. Given that the game map represents a non-linear discrete space, we selected a Random Forest classifier to construct the predictive model \cite{breiman2001randomforest}. The training data was collected entirely through real gameplay testing conducted by our group members, resulting in a total of 4,206 data entries saved in JSONL format. Each line represents a player decision sample containing the current state features and the ground-truth movement label. Based on this dataset, to minimize the parameter count while preserving high-quality characteristics, the model extracts and learns three core categories of features: 
 \begin{enumerate}
     \item \textbf{Spatial Relative Position:} The two-dimensional coordinates of the human relative to the monster, using the monster as the reference frame.
     \item \textbf{Environmental Obstacles:} Binarized features indicating whether the human is blocked by walls in the four adjacent directions.
@@ -655,7 +655,7 @@ This evaluation considered three metrics: capture rate, capture steps (the numbe
 
 First of all, according to the analysis of the importance of the characteristics of the random forest model,(Figure~\ref{fig:ml_feature_importance}) the model does not only rely on a single variable; the current spatial location, obstacle information and historical movement information are equally important, among which historical movement information is the most critical feature, and the importance score of prev1 (the previous move) is 0.2842, followed by prev2 (move the first two steps), the important score is 0.1463. It is reflected that in the actual game scenario, players usually continue to move in the same direction when escaping. In addition, spatial characteristics are also very important: the importance of rel\_col (relative column distance) is 0.1443, and the importance of rel\_row (relative row distance) is 0.1211. These two characteristics describe the position of the player relative to the monster, so that the model can learn what the player tends to reflect when the player and the monster are in different relative positions. The importance of wall features is low, between 0.07 and 0.08, indicating that obstacle features are mainly used to help the model exclude impossible movement.
 
-The SHAP swarm diagram (Figure~\ref{fig:ml_shap_beeswarm}) further explains how each individual feature affects the prediction results of the model. The content reflected by the swarm diagram is basically consistent with the previous feature importance analysis. The SHAP value of prev1 is the most widely distributed, indicating that it has the greatest impact on prediction, while the narrower SHAP distribution of the relative position indicates that they need to work with historical information and obstacle information to play a role, and can rarely dominate the prediction alone.
+The SHAP swarm diagram (Figure~\ref{fig:ml_shap_beeswarm}) further explains how each individual feature affects the prediction results of the model \cite{lundberg2017shap}. The content reflected by the swarm diagram is basically consistent with the previous feature importance analysis. The SHAP value of prev1 is the most widely distributed, indicating that it has the greatest impact on prediction, while the narrower SHAP distribution of the relative position indicates that they need to work with historical information and obstacle information to play a role, and can rarely dominate the prediction alone.
 
 The ablation experiment (Figure~\ref{fig:ml_ablation}) confirms the importance of reasonably combining all characteristic groups. The complete model achieves the highest balance accuracy rate of 0.7649. After removing historical features, the prediction accuracy will drop to 0.5712, which shows that the previous direction of movement is indispensable. However, the model that only retains historical features (history\_only) has reached 0.6143, which is better than the position-only model and the wall-only model.
 
@@ -765,9 +765,52 @@ Implemented the Greedy Search algorithm for basic monster chasing behavior. Also
 \label{tab:team_contributions}
 \end{table}
 
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
 
-...
+\bibitem{russell2020aima}
+S. Russell and P. Norvig,
+\textit{Artificial Intelligence: A Modern Approach},
+4th ed. Pearson, 2020.
+
+\bibitem{hart1968astar}
+P. E. Hart, N. J. Nilsson, and B. Raphael,
+``A formal basis for the heuristic determination of minimum cost paths,''
+\textit{IEEE Transactions on Systems Science and Cybernetics},
+vol. 4, no. 2, pp. 100--107, 1968.
+
+\bibitem{holland1975genetic}
+J. H. Holland,
+\textit{Adaptation in Natural and Artificial Systems},
+University of Michigan Press, 1975.
+
+\bibitem{goldberg1989genetic}
+D. E. Goldberg,
+\textit{Genetic Algorithms in Search, Optimization, and Machine Learning},
+Addison-Wesley, 1989.
+
+\bibitem{kirkpatrick1983sa}
+S. Kirkpatrick, C. D. Gelatt, and M. P. Vecchi,
+``Optimization by simulated annealing,''
+\textit{Science},
+vol. 220, no. 4598, pp. 671--680, 1983.
+
+\bibitem{knuth1975alphabeta}
+D. E. Knuth and R. W. Moore,
+``An analysis of alpha-beta pruning,''
+\textit{Artificial Intelligence},
+vol. 6, no. 4, pp. 293--326, 1975.
+
+\bibitem{breiman2001randomforest}
+L. Breiman,
+``Random forests,''
+\textit{Machine Learning},
+vol. 45, no. 1, pp. 5--32, 2001.
+
+\bibitem{lundberg2017shap}
+S. M. Lundberg and S.-I. Lee,
+``A unified approach to interpreting model predictions,''
+in \textit{Advances in Neural Information Processing Systems},
+vol. 30, 2017.
 
 \end{thebibliography}
 
