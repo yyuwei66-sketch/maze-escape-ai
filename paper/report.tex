@@ -1,6 +1,7 @@
 \documentclass[12pt,a4paper]{article}
 
 \usepackage{graphicx}
+\graphicspath{{./}{paper/}}
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{longtable}
@@ -26,7 +27,15 @@
     }%
 }
 
-
+% ---------- Safe image insertion command ----------
+% It inserts the image when the file exists; otherwise it keeps the original placeholder.
+\newcommand{\insertimage}[2][0.85\linewidth]{%
+    \IfFileExists{#2}{%
+        \includegraphics[width=#1]{#2}%
+    }{%
+        \imageplaceholder{#2}%
+    }%
+}
 
 \geometry{margin=1in}
 
@@ -76,9 +85,9 @@ After ensuring that there is no problem with the game logic framework and it can
 
 \section{Introduction}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \imageplaceholder{system.png}
+    \includegraphics[width=0.8\textwidth]{system.png}
     \caption{Game System}
     \label{GameSystem}
 \end{figure}
@@ -300,7 +309,7 @@ was required and the selected routes contained no wall visits in these runs.
 These results show that the method is fast enough for interactive play.
 Also, the algorithm can effectively retain safe movement while producing varied routes.
 
-\subsubsection{Mininax for Predictive Monster AI}
+\subsubsection{Minimax for Predictive Monster AI}
 
 Minimax models the chasing process of monster and player as a zero-sum game. The monster as the Min, wanting to shorten the distance between one another, while the player is the Mac, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
 
@@ -319,9 +328,9 @@ Compared to Greedy Search, Minimax and do predict to the player, more predictabl
 
 \subsection{Machine Learning Dual-Monster Mode}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \imageplaceholder{ml.png}
+    \includegraphics[width=0.78\textwidth]{our_work.png}
     \caption{Our Work}
     \label{fig:example}
 \end{figure}
@@ -461,11 +470,11 @@ This system includes four items: \textbf{Swift Boots, Frost Trap, Teleport Stone
 
 \subsubsection{Swift Boots}
 
-At first, we only tested the normal chasing logic. However, in the two-monster mode, the player could be caught very easily when both monsters came close. Therefore, we decided to add an item called Frost Trap. In the implementation, we did not simply pause the whole game. Instead, we stored a frozen counter for each monster separately. After the player picks up this item, the counter of every monster is set to 5. Before a monster moves, the program first checks this value. If the value is greater than zero, the monster will skip its movement in that turn. After the player finishes a complete turn, the counter decreases by one.
+Swift Boots is a movement-enhancing item. After the player picks up this item, the player can perform at most two separate one-cell movements in each of the following five complete player turns. These two movement steps can be in different directions. For example, the player can first move upward and then move to the right. Therefore, this item does not simply allow the player to move two cells in a straight line. Instead, it changes the player’s turn structure and allows the player to perform multiple movements within one turn, similar to the movement pattern of the monsters.
 
+This design is more flexible than directly moving two cells in one direction, because the player can turn corners to avoid walls or escape from the monster’s chasing path. Each single-cell movement is still checked independently for wall collision, item pickup, and monster collision. As a result, the player cannot pass through walls or skip important events on the map.
 
-
-We also considered whether freezing only one monster would be enough, but this did not work well in the dual-monster mode. The other monster could still move closer to the player, so the player might still be caught quickly. Therefore, we finally made Frost Trap affect all monsters at the same time. To prevent this item from becoming too strong, the frozen time is not accumulated without limit when the player picks up Frost Trap multiple times. Instead, the game refreshes the counter or keeps the larger frozen value.
+The duration of Swift Boots decreases by one only after the player finishes a complete turn, instead of decreasing after each single movement. If the player picks up another Swift Boots while the effect is still active, the duration will be refreshed to five turns instead of being stacked repeatedly. This mechanism ensures that the item is useful enough for escaping, while preventing the player from staying in an overly powerful state for too long.
 \subsubsection{Frost Trap}
 At first, we only tested the normal chasing logic. However, in the two-monster mode, the player could be easily caught by two monsters. Therefore, we decided to design an item called Frost Trap. In the implementation, we did not simply pause the whole game. Instead, we saved a frozen counter for every monster individually. After the player picks up this item, every monster's counter is set to 5. Every time a monster prepares to move, the program first checks this value. If the value is larger than zero, the monster cannot move in this turn. After the player finishes a complete turn, the counter decreases by one.
 
@@ -522,7 +531,7 @@ The following sections will introduce several core interface components, detaili
 
 \subsubsection{Pre-Game Pages}
 
-The Index page serves as the main entry point of the game. It emplays a wooden board-style title design and provides three main options: ``Start Game'', ``Manual'', and ``Exit''. The manual interface provides a structured overview of the introduction of two modes, an explanation of the control scheme and four items. To enable players to review the rules at any time during the game, pressing the M key on any screen can open a overlay component of the manual. It allow them to quickly check methods and item effects without having to exit the game.
+The Index page serves as the main entry point of the game. It employs a wooden board-style title design and provides three main options: ``Start Game'', ``Manual'', and ``Exit''. The manual interface provides a structured overview of the introduction of two modes, an explanation of the control scheme and four items. To enable players to review the rules at any time during the game, pressing the M key on any screen can open a overlay component of the manual. It allow them to quickly check methods and item effects without having to exit the game.
 
 % (picture index)
 
@@ -542,7 +551,7 @@ The HUD panel on the right consists of two sections: ``Game Stats'' and ``Item''
 
 In Human Mode, every movement command is sent from the frontend to the backend.
 
-It enable the \texttt{apply\_player\_move()} function to process the logic for that turn. First, it checks whether the target square is accessible. If the move is viable, it then checks whether there are any items at that location and activates the relevant effect. Due to the existence of the \textit{Switch Boots}, the number of moves within a single turn is not limited to one. We use status variables like \texttt{remaining\_player\_steps\_this\_turn} and \texttt{waiting\_for\_second\_step} to dynamically determine whether the player is still able to make a second move. And based on this, the system can decide whether to end the turn early or let player make an additional move.
+It enable the \texttt{apply\_player\_move()} function to process the logic for that turn. First, it checks whether the target square is accessible. If the move is viable, it then checks whether there are any items at that location and activates the relevant effect. Due to the existence of the \textit{Swift Boots}, the number of moves within a single turn is not limited to one. We use status variables like \texttt{remaining\_player\_steps\_this\_turn} and \texttt{waiting\_for\_second\_step} to dynamically determine whether the player is still able to make a second move. And based on this, the system can decide whether to end the turn early or let player make an additional move.
 
 When this round's movement is finished, the backend calculates the monsters' new positions using the algorithms we prepared. Then it updates status decay information such as item duration and the number of freeze rounds. Finally, it returns the complete state to the frontend via \texttt{serialise()}. So the map and HUD can be refreshed automatically.
 
@@ -579,30 +588,30 @@ In order to evaluate the performance of different algorithms from multiple angle
 
 This evaluation refers to three indicators: capture rate, number of capture steps (the number of steps required to capture players) and average decision-making time. First of all, we use the capture rate to measure the stability of this algorithm: for the number of capture steps, monsters driven by stronger algorithms should be able to successfully capture players with fewer step limits. Secondly, the fewer the number of capture steps, the better, but a balance should be achieved between chasing efficiency. Therefore, we finally calculated the decision-making time to compare the calculation overhead required by different algorithms for each decision-making.
 
-\begin{figure}[!ht]
+\begin{figure}[H]
     \centering
-    \begin{minipage}[t]{0.45\textwidth}
+    \begin{minipage}[t]{0.46\textwidth}
         \centering
-        \imageplaceholder{fig2_steps_box.png}
+        \includegraphics[width=\linewidth]{fig2_steps_box.png}
         \caption{Steps Distribution}
         \label{fig:steps_box}
-    \end{minipage}%
+    \end{minipage}
     \hfill
-    \begin{minipage}[t]{0.45\textwidth}
+    \begin{minipage}[t]{0.46\textwidth}
         \centering
-        \imageplaceholder{fig3_catch_rate.png}
+        \includegraphics[width=\linewidth]{fig3_catch_rate.png}
         \caption{Catch Rate}
         \label{fig:catch_rate}
     \end{minipage}
-    
-    \vspace{0.4cm}
-    
-    \begin{minipage}[t]{0.45\textwidth}
+
+    \vspace{0.35cm}
+
+    \begin{minipage}[t]{0.52\textwidth}
         \centering
-        \imageplaceholder{fig6_overview.png}
+        \includegraphics[width=\linewidth]{fig6_overview.png}
         \caption{Performance Overview}
+        \label{fig:Performance Overview}
     \end{minipage}
-    
 \end{figure}
 
 \begin{itemize}
@@ -644,43 +653,40 @@ To evaluate the performance of different algorithms from multiple perspectives, 
 
 This evaluation considered three metrics: capture rate, capture steps (the number of steps required to capture the player), and average decision time. First, we used the capture rate to measure the algorithm's stability: for capture steps, a more powerful algorithm-driven monster should be able to successfully capture the player within a fewer step limit. Second, fewer capture steps are not necessarily better; a balance must be struck between capture efficiency and pursuit efficiency. Therefore, we finally calculated the decision time to compare the computational cost required for each decision by different algorithms.
 
-First of all, according to the analysis of the importance of the characteristics of the random forest model,(Figure~\ref{fig:ml_feature_importance}) the model does not only rely on a single variable; the current spatial location, obstacle information and historical movement information are equally important, among which historical movement information is the most critical feature, and the importance score of prev1 (the previous move) is 0.2842, followed by prev2 (move the first two steps), the important score is 0.1463. It is reflected that in the actual game scenario, players usually continue to move in the same direction when escaping. In addition, spatial characteristics are also very important: the importance of rel_col (relative column distance) is 0.1443, and the importance of rel_row (relative row distance) is 0.1211. These two characteristics describe the position of the player relative to the monster, so that the model can learn what the player tends to reflect when the player and the monster are in different relative positions. The importance of wall features is low, between 0.07 and 0.08, indicating that obstacle features are mainly used to help the model exclude impossible movement.
+First of all, according to the analysis of the importance of the characteristics of the random forest model,(Figure~\ref{fig:ml_feature_importance}) the model does not only rely on a single variable; the current spatial location, obstacle information and historical movement information are equally important, among which historical movement information is the most critical feature, and the importance score of prev1 (the previous move) is 0.2842, followed by prev2 (move the first two steps), the important score is 0.1463. It is reflected that in the actual game scenario, players usually continue to move in the same direction when escaping. In addition, spatial characteristics are also very important: the importance of rel\_col (relative column distance) is 0.1443, and the importance of rel\_row (relative row distance) is 0.1211. These two characteristics describe the position of the player relative to the monster, so that the model can learn what the player tends to reflect when the player and the monster are in different relative positions. The importance of wall features is low, between 0.07 and 0.08, indicating that obstacle features are mainly used to help the model exclude impossible movement.
 
 The SHAP swarm diagram (Figure~\ref{fig:ml_shap_beeswarm}) further explains how each individual feature affects the prediction results of the model. The content reflected by the swarm diagram is basically consistent with the previous feature importance analysis. The SHAP value of prev1 is the most widely distributed, indicating that it has the greatest impact on prediction, while the narrower SHAP distribution of the relative position indicates that they need to work with historical information and obstacle information to play a role, and can rarely dominate the prediction alone.
 
-The ablation experiment (Figure~\ref{fig:ml_ablation}) confirms the importance of reasonably combining all characteristic groups. The complete model achieves the highest balance accuracy rate of 0.7649. After removing historical features, the prediction accuracy will drop to 0.5712, which shows that the previous direction of movement is indispensable. However, the model that only retains historical features (history_only) has reached 0.6143, which is better than the position-only model and the wall-only model.
+The ablation experiment (Figure~\ref{fig:ml_ablation}) confirms the importance of reasonably combining all characteristic groups. The complete model achieves the highest balance accuracy rate of 0.7649. After removing historical features, the prediction accuracy will drop to 0.5712, which shows that the previous direction of movement is indispensable. However, the model that only retains historical features (history\_only) has reached 0.6143, which is better than the position-only model and the wall-only model.
 
-\begin{figure}[!ht]
+\begin{figure}[H]
     \centering
-
-    % ===== 第一行 =====
-    \begin{subfigure}[t]{0.48\textwidth}
+    \begin{subfigure}[t]{0.47\textwidth}
         \centering
-        \imageplaceholder{ml_confusion_matrix_heatmap.png}
+        \includegraphics[width=\linewidth]{ml_confusion_matrix_heatmap.png}
         \caption{Direction Prediction Confusion Matrix}
         \label{fig:ml_confusion_matrix}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.48\textwidth}
+    \begin{subfigure}[t]{0.47\textwidth}
         \centering
-        \imageplaceholder{ml_feature_importance.png}
+        \includegraphics[width=\linewidth]{ml_feature_importance.png}
         \caption{Random Forest Feature Importance}
         \label{fig:ml_feature_importance}
     \end{subfigure}
 
-    \vspace{0.4cm}
+    \vspace{0.25cm}
 
-    % ===== 第二行 =====
-    \begin{subfigure}[t]{0.48\textwidth}
+    \begin{subfigure}[t]{0.47\textwidth}
         \centering
-        \imageplaceholder{ml_shap_beeswarm_left.png}
+        \includegraphics[width=\linewidth]{ml_shap_beeswarm_left.png}
         \caption{SHAP Beeswarm Plot}
         \label{fig:ml_shap_beeswarm}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.48\textwidth}
+    \begin{subfigure}[t]{0.47\textwidth}
         \centering
-        \imageplaceholder{ml_ablation_balanced_accuracy.png}
+        \includegraphics[width=\linewidth]{ml_ablation_balanced_accuracy.png}
         \caption{Ablation Study - Balanced Accuracy}
         \label{fig:ml_ablation}
     \end{subfigure}
