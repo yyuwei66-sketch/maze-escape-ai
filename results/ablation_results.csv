@@ -1,7 +1,0 @@
-experiment,num_features,features,accuracy,balanced_accuracy
-full_model,16,"human_row, human_col, monster_row, monster_col, wall_up, wall_down, wall_left, wall_right, prev_up_1, prev_down_1, prev_left_1, prev_right_1, prev_up_2, prev_down_2, prev_left_2, prev_right_2",0.727710843373494,0.721268015168582
-no_history,8,"human_row, human_col, monster_row, monster_col, wall_up, wall_down, wall_left, wall_right",0.6963855421686747,0.6992776354491045
-no_wall,12,"human_row, human_col, monster_row, monster_col, prev_up_1, prev_down_1, prev_left_1, prev_right_1, prev_up_2, prev_down_2, prev_left_2, prev_right_2",0.6698795180722892,0.6642404300942326
-position_only,4,"human_row, human_col, monster_row, monster_col",0.6650602409638554,0.6565783944444785
-history_only,8,"prev_up_1, prev_down_1, prev_left_1, prev_right_1, prev_up_2, prev_down_2, prev_left_2, prev_right_2",0.6,0.5832735698406458
-wall_only,4,"wall_up, wall_down, wall_left, wall_right",0.4987951807228916,0.43848115748210226
