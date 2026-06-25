@@ -163,7 +163,7 @@ In the process of the monster moving to the player in each round, the map grid i
 
 \subsubsection{Greedy Search for Monster Movement}
 
-The Greedy Search is our basic pursuit strategy, which applied in the ``simple'' level. At each beginning of each round, our system will run a BFS computation at the current cell, in order to build a distance filed: the array stores the real distance between player and monster (with grid steps, including the circumstance of walls and wrap-around) to human. After that, each monster check all the cell it can move to, and choose the shortest one, and repeat it again. The system avoid two monster stayed in the same cell. If the monster is stuck, and have no possible way to player, we will use Manhattan distance, so the monster still makes forward progress.
+The Greedy Search is our basic pursuit strategy, which applied in the ``simple'' level. At each beginning of each round, our system will run a BFS computation at the current cell, in order to build a distance field: the array stores the real distance between player and monster (with grid steps, including the circumstance of walls and wrap-around) to human. After that, each monster check all the cell it can move to, and choose the shortest one, and repeat it again. The system avoid two monster stayed in the same cell. If the monster is stuck, and have no possible way to player, we will use Manhattan distance, so the monster still makes forward progress.
 
 The Greedy Search is very speedy and simple, each round and only need to compute BFS once and a constant number of comparison. Its shortcoming is that the monster is totally passive during the game, can not predict where the player would go. Facing the clever player, it would be dumb and be stuck in the trap, so it will be more long for it to catch the player. Hence, the Greedy Search is a well-known basic strategy, the foundation of the higher or cleverer algorithm.
 
@@ -239,7 +239,7 @@ while also permits SA to pass through temporarily poor intermediate states. Beca
 new route is planned every turn, the first six steps are attached more importance than a
 distant suffix that may not be executed instantly.
 
-The final term reduces visible repeatation between turns:
+The final term reduces visible repetition between turns:
 \[
 R(P)=10I(p_{\mathrm{move}}=p_{\mathrm{prev,start}}),
 \]
@@ -258,7 +258,7 @@ accepted with probability
 This permits broad exploration at high temperature and increasingly selective
 search as the temperature falls. The implementation also tracks the best
 accepted route whose first two steps are both walkable. That route
-is prefered over a lower-scoring route that the monster cannot execute safely.
+is preferred over a lower-scoring route that the monster cannot execute safely.
 
 \begin{table}[H]
 \centering
@@ -300,9 +300,9 @@ was required and the selected routes contained no wall visits in these runs.
 These results show that the method is fast enough for interactive play.
 Also, the algorithm can effectively retain safe movement while producing varied routes.
 
-\subsubsection{Mininax for Predictive Monster AI}
+\subsubsection{Minimax for Predictive Monster AI}
 
-Minimax models the chasing process of monster and player as a zero-sum game. The monster as the Min, wanting to shorten the distance between one another, while the player is the Mac, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
+Minimax models the chasing process of monster and player as a zero-sum game. The monster as the Min, wanting to shorten the distance between one another, while the player is the Max, wanting to make the distance larger. The system builds a depth-limit game tree which represent every step or action the agent might move. Following the round-round structure, at each round, the monster will search and take two step forward, then play will take one-step action. The round will be repeated with a constant number rounds, the default depth is two, so that it will be within the computation budget.
 
 Leaf nodes are calculated by an evaluation functions, which is based on the distance of player to each monsters.
 
@@ -313,7 +313,7 @@ Leaf nodes are calculated by an evaluation functions, which is based on the dist
 
 We give the first term as a approximately weight 4, which is the biggest weight as well, since the smallest distance represent the biggest risk. The summation keeps the other monsters moving as well. Small figure favor the monsters, while the big one favor the player. If the monster get the player's cell, the node will return a big negative score, and if the use step is the score is lower, so that the monster will try to use the least step to catch.
 
-Searching the whole tree is expensive, so we use standard optimizations. First, we use the alpha-beta pruning, to eliminate the branch which is impossible to effect the final decision, so that we can cut down the quantity of the nodes to be searched. Second, we apply the transposition table to cash the result of each evaluated state. With player position, tuple of monsters position, and ply index as keys and all together with a bound flag. Since all in a wrap-around grid, so we can avoid a lot of repeated work and calculation. Third, we use the move ordering to check the most hopeful path first: the path of monster are ordered by increasing distance to player, the path of monster are ordered by decreasing distance to player, and the best path recorded by the transposition table. Good sequence will make the alpha-beta prune much more aggressively and get a better result. After the searching, the chosen sequence of move for current move will be rebuilt from the transposition-table entries and returned through the same interface.
+Searching the whole tree is expensive, so we use standard optimizations. First, we use the alpha-beta pruning, to eliminate the branch which is impossible to effect the final decision, so that we can cut down the quantity of the nodes to be searched. Second, we apply the transposition table to cache the result of each evaluated state. With player position, tuple of monsters position, and ply index as keys and all together with a bound flag. Since all in a wrap-around grid, so we can avoid a lot of repeated work and calculation. Third, we use the move ordering to check the most hopeful path first: the path of monster are ordered by increasing distance to player, the path of monster are ordered by decreasing distance to player, and the best path recorded by the transposition table. Good sequence will make the alpha-beta prune much more aggressively and get a better result. After the searching, the chosen sequence of move for current move will be rebuilt from the transposition-table entries and returned through the same interface.
 
 Compared to Greedy Search, Minimax and do predict to the player, more predictable. Since it will modify simulate the best choice made by player, so it will do cut the escape route of the player, but not just follow the player passively. But the cost is high computation, and increasing with branching factor and look-ahead depth. The optimization above is the key factor that make the algorithm into usable. Hence, Minimax will be used in the more difficult level.
 
@@ -461,11 +461,11 @@ This system includes four items: \textbf{Swift Boots, Frost Trap, Teleport Stone
 
 \subsubsection{Swift Boots}
 
-At first, we only tested the normal chasing logic. However, in the two-monster mode, the player could be caught very easily when both monsters came close. Therefore, we decided to add an item called Frost Trap. In the implementation, we did not simply pause the whole game. Instead, we stored a frozen counter for each monster separately. After the player picks up this item, the counter of every monster is set to 5. Before a monster moves, the program first checks this value. If the value is greater than zero, the monster will skip its movement in that turn. After the player finishes a complete turn, the counter decreases by one.
+Swift Boots is a movement-enhancing item. After the player picks up this item, the player can perform at most two separate one-cell movements in each of the following five complete player turns. These two movement steps can be in different directions. For example, the player can first move upward and then move to the right. Therefore, this item does not simply allow the player to move two cells in a straight line. Instead, it changes the player’s turn structure and allows the player to perform multiple movements within one turn, similar to the movement pattern of the monsters.
 
+This design is more flexible than directly moving two cells in one direction, because the player can turn corners to avoid walls or escape from the monster’s chasing path. Each single-cell movement is still checked independently for wall collision, item pickup, and monster collision. As a result, the player cannot pass through walls or skip important events on the map.
 
-
-We also considered whether freezing only one monster would be enough, but this did not work well in the dual-monster mode. The other monster could still move closer to the player, so the player might still be caught quickly. Therefore, we finally made Frost Trap affect all monsters at the same time. To prevent this item from becoming too strong, the frozen time is not accumulated without limit when the player picks up Frost Trap multiple times. Instead, the game refreshes the counter or keeps the larger frozen value.
+The duration of Swift Boots decreases by one only after the player finishes a complete turn, instead of decreasing after each single movement. If the player picks up another Swift Boots while the effect is still active, the duration will be refreshed to five turns instead of being stacked repeatedly. This mechanism ensures that the item is useful enough for escaping, while preventing the player from staying in an overly powerful state for too long.
 \subsubsection{Frost Trap}
 At first, we only tested the normal chasing logic. However, in the two-monster mode, the player could be easily caught by two monsters. Therefore, we decided to design an item called Frost Trap. In the implementation, we did not simply pause the whole game. Instead, we saved a frozen counter for every monster individually. After the player picks up this item, every monster's counter is set to 5. Every time a monster prepares to move, the program first checks this value. If the value is larger than zero, the monster cannot move in this turn. After the player finishes a complete turn, the counter decreases by one.
 
@@ -522,7 +522,7 @@ The following sections will introduce several core interface components, detaili
 
 \subsubsection{Pre-Game Pages}
 
-The Index page serves as the main entry point of the game. It emplays a wooden board-style title design and provides three main options: ``Start Game'', ``Manual'', and ``Exit''. The manual interface provides a structured overview of the introduction of two modes, an explanation of the control scheme and four items. To enable players to review the rules at any time during the game, pressing the M key on any screen can open a overlay component of the manual. It allow them to quickly check methods and item effects without having to exit the game.
+The Index page serves as the main entry point of the game. It employs a wooden board-style title design and provides three main options: ``Start Game'', ``Manual'', and ``Exit''. The manual interface provides a structured overview of the introduction of two modes, an explanation of the control scheme and four items. To enable players to review the rules at any time during the game, pressing the M key on any screen can open a overlay component of the manual. It allow them to quickly check methods and item effects without having to exit the game.
 
 % (picture index)
 
@@ -542,7 +542,7 @@ The HUD panel on the right consists of two sections: ``Game Stats'' and ``Item''
 
 In Human Mode, every movement command is sent from the frontend to the backend.
 
-It enable the \texttt{apply\_player\_move()} function to process the logic for that turn. First, it checks whether the target square is accessible. If the move is viable, it then checks whether there are any items at that location and activates the relevant effect. Due to the existence of the \textit{Switch Boots}, the number of moves within a single turn is not limited to one. We use status variables like \texttt{remaining\_player\_steps\_this\_turn} and \texttt{waiting\_for\_second\_step} to dynamically determine whether the player is still able to make a second move. And based on this, the system can decide whether to end the turn early or let player make an additional move.
+It enable the \texttt{apply\_player\_move()} function to process the logic for that turn. First, it checks whether the target square is accessible. If the move is viable, it then checks whether there are any items at that location and activates the relevant effect. Due to the existence of the \textit{Swift Boots}, the number of moves within a single turn is not limited to one. We use status variables like \texttt{remaining\_player\_steps\_this\_turn} and \texttt{waiting\_for\_second\_step} to dynamically determine whether the player is still able to make a second move. And based on this, the system can decide whether to end the turn early or let player make an additional move.
 
 When this round's movement is finished, the backend calculates the monsters' new positions using the algorithms we prepared. Then it updates status decay information such as item duration and the number of freeze rounds. Finally, it returns the complete state to the frontend via \texttt{serialise()}. So the map and HUD can be refreshed automatically.
 
@@ -601,6 +601,7 @@ This evaluation refers to three indicators: capture rate, number of capture step
         \centering
         \imageplaceholder{fig6_overview.png}
         \caption{Performance Overview}
+        \label{fig:performance_overview}
     \end{minipage}
     
 \end{figure}
@@ -630,7 +631,7 @@ This evaluation refers to three indicators: capture rate, number of capture step
 
 Considering that our game is a real-time interactive system, the AI must not only possess strong pursuit capabilities but also guarantee sufficient response speed. A* achieved the fastest decision speed, requiring an average of only 0.0511 milliseconds per decision. From an operational efficiency standpoint, it is the most outstanding among the four algorithms. Greedy's average decision time was 0.3449 milliseconds; although slightly slower than A*, it remains highly efficient. Minimax recorded an average decision time of 0.6211 milliseconds. Compared to A* and Greedy, its execution speed is slower, but the reason is evident: Minimax needs to search future possible game states before making a decision. SA performed poorly, with an average decision time as high as 9.9962 milliseconds, far exceeding the other three algorithms.
     
-    \item \textbf{Comprehensive Performance Analysis:} We aim to find the optimal trade-off between capture steps (efficiency) and decision time (speed), where the ideal algorithm should sit as close as possible to the bottom-left region of the chart~\ref{fig:Performance Overview}. The chart shows that the A* algorithm delivers the best comprehensive performance, maintaining a low capture step count while delivering ultra-fast response times. Consequently, we deployed the A* algorithm in the game's hardest levels, and the subsequent machine learning dual-monster mode was also developed based on A*. Minimax and Greedy represent two alternative solutions that achieve a good balance between capture steps and running speed. In contrast, Simulated Annealing performed the worst, lagging significantly behind the others in both aspects.
+    \item \textbf{Comprehensive Performance Analysis:} We aim to find the optimal trade-off between capture steps (efficiency) and decision time (speed), where the ideal algorithm should sit as close as possible to the bottom-left region of the chart~\ref{fig:performance_overview}. The chart shows that the A* algorithm delivers the best comprehensive performance, maintaining a low capture step count while delivering ultra-fast response times. Consequently, we deployed the A* algorithm in the game's hardest levels, and the subsequent machine learning dual-monster mode was also developed based on A*. Minimax and Greedy represent two alternative solutions that achieve a good balance between capture steps and running speed. In contrast, Simulated Annealing performed the worst, lagging significantly behind the others in both aspects.
 \end{itemize}
 
 In conclusion, due to its exceptional execution speed, A* is the most outstanding all-round algorithm; however, when minimizing capture steps is the primary goal, Minimax performs the best. Conversely, the SA algorithm is entirely unsuitable for application in real-time pursuit games.
