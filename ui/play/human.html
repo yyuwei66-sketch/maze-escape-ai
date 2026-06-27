@@ -771,9 +771,7 @@ function drawMonster() {
         const dx = x + TILE / 2 - renderW / 2;
         const dy = y - (renderH - TILE) * 0.8 + (isWalking ? 0 : monsterBreathOffset);
 
-        if (invisibleTurns > 0) ctx.globalAlpha = 0.4;
         ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, renderW, renderH);
-        ctx.globalAlpha = 1.0;
     }
 
     drawOne(monster[0], monster[1], monsterWalkDirection, monsterMoveTime);

@@ -44,6 +44,18 @@ class FlaskGameTest(unittest.TestCase):
         self.assertIn("JSON.stringify({ action: 'end_turn' })", html)
         self.assertNotIn("dashRequested", html)
 
+    def test_human_ui_cloak_transparency_only_applies_to_human(self):
+        html = Path("ui/play/human.html").read_text(encoding="utf-8")
+        draw_human = html.split("function drawHuman()", 1)[1].split(
+            "function drawMonster()", 1
+        )[0]
+        draw_monster = html.split("function drawMonster()", 1)[1].split(
+            "const MONSTER_WALK_SRC", 1
+        )[0]
+
+        self.assertIn("invisibleTurns > 0", draw_human)
+        self.assertNotIn("invisibleTurns > 0", draw_monster)
+
     def test_create_escape_game(self):
         response = self.make_game({"mode": "escape", "opponent_ai": "astar"})
 
@@ -345,6 +357,27 @@ class FlaskGameTest(unittest.TestCase):
         self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
         self.assertEqual(main.games[game_id].human, (1, 0))
 
+    def test_sa_same_destination_falls_back_to_moving_path(self):
+        response = self.make_game(
+            {"mode": "escape", "opponent_ai": "sa", "item_count": 0},
+            spawns=((0, 0), (0, 5)),
+        )
+        game_id = response.get_json()["game_id"]
+
+        with patch("main.run_cpp_map_algorithm", return_value=((1, 0), (0, 5))):
+            move = self.client.post(
+                f"/api/games/{game_id}/move",
+                json={"direction": "down"},
+            )
+
+        self.assertEqual(move.status_code, 200)
+        data = move.get_json()
+        self.assertMonsterPositions(data["monsters"], [{"row": 0, "col": 3}])
+        self.assertEqual(
+            data["monsters"][0]["path"],
+            [{"row": 0, "col": 4}, {"row": 0, "col": 3}],
+        )
+
     def test_ended_game_rejects_more_moves(self):
         response = self.make_game(
             {"mode": "escape", "opponent_ai": "astar"},
@@ -612,6 +645,31 @@ class FlaskGameTest(unittest.TestCase):
         self.assertNotEqual(target, (10, 10))
         self.assertNotEqual(target, (15, 15))
         self.assertEqual(game.grid[target[0]][target[1]], 0)
+
+    def test_safe_teleport_requires_monster_reachable_cell(self):
+        grid = [[1 for _ in range(5)] for _ in range(5)]
+        grid[0][0] = 0
+        grid[0][1] = 0
+        grid[0][2] = 0
+        grid[2][2] = 0
+        game = main.GameState(
+            grid=grid,
+            human=(0, 1),
+            human_spawn=(0, 1),
+            monsters=[(0, 0)],
+            mode="escape",
+            opponent_ai="astar",
+            monster_frozen_turns=[0],
+        )
+
+        with patch("main.random.choice", side_effect=lambda cells: cells[0]):
+            target = main.find_safe_teleport_position(game)
+
+        self.assertEqual(target, (0, 2))
+        target_distance = main.distance_field(game.grid, game.monsters)[target[0]][
+            target[1]
+        ]
+        self.assertIsNotNone(target_distance)
 
     def test_freeze_trap_stops_monster_after_it_steps_on_trap(self):
         response = self.make_game(

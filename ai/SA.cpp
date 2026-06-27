@@ -129,6 +129,12 @@ Point actualMovePoint(const vector<Point>& path) {
     return path[step];
 }
 
+bool movesAwayFromStart(const vector<Point>& path) {
+    Point start{monsterX, monsterY};
+    Point target{humanX, humanY};
+    return samePoint(start, target) || !samePoint(actualMovePoint(path), start);
+}
+
 bool firstMovesAreLegal(const vector<Point>& path) {
     int last = min(MONSTER_MOVE_STEPS, static_cast<int>(path.size()) - 1);
     for (int i = 1; i <= last; ++i) {
@@ -136,7 +142,7 @@ bool firstMovesAreLegal(const vector<Point>& path) {
             return false;
         }
     }
-    return true;
+    return movesAwayFromStart(path);
 }
 
 bool validCandidate(const vector<Point>& path, const Point& start, const Point& target) {
@@ -379,6 +385,28 @@ vector<Point> legalBfsPath(const Point& start, const Point& target) {
     return path;
 }
 
+vector<Point> legalProgressPath(const Point& start, const Point& target) {
+    if (samePoint(start, target)) {
+        return {start};
+    }
+
+    vector<Point> candidates = nextPoints(start);
+    vector<Point> legal;
+    for (const Point& candidate : candidates) {
+        if (available(candidate)) {
+            legal.push_back(candidate);
+        }
+    }
+    if (legal.empty()) {
+        return {start};
+    }
+
+    sort(legal.begin(), legal.end(), [&](const Point& a, const Point& b) {
+        return torusDistance(a, target) < torusDistance(b, target);
+    });
+    return {start, legal.front()};
+}
+
 int countWallVisits(const vector<Point>& path) {
     int count = 0;
     for (int i = 1; i < static_cast<int>(path.size()); ++i) {
@@ -503,6 +531,10 @@ int main(int argc, char** argv) {
         bool fallbackUsed = !firstMovesAreLegal(selectedPath);
         if (fallbackUsed) {
             selectedPath = legalBfsPath(start, target);
+        }
+        if (!movesAwayFromStart(selectedPath)) {
+            selectedPath = legalProgressPath(start, target);
+            fallbackUsed = true;
         }
         Point movedMonster = actualMovePoint(selectedPath);
         if (!available(movedMonster)) {

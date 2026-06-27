@@ -473,10 +473,11 @@ def find_safe_teleport_position(
     occupied.update(item.pos for item in game.items if item.active)
     occupied.update(trap.pos for trap in game.traps if trap.active)
     candidates = [
-        (distances[row][col] if distances[row][col] is not None else float("inf"), (row, col))
+        (distances[row][col], (row, col))
         for row, cells in enumerate(game.grid)
         for col, value in enumerate(cells)
         if int(value) == 0
+        and distances[row][col] is not None
         and (row, col) != game.human
         and (row, col) not in occupied
     ]
@@ -821,18 +822,44 @@ def planned_monster_paths(game: GameState) -> List[List[Pos]]:
     if ai_name in {"greedy", "minimax"}:
         return planned_controller_paths(game, ai_name)
     if ai_name == "sa":
-        try:
-            _, monster = run_cpp_map_algorithm(
-                "sa",
-                game.grid,
-                game.human,
-                game.monsters[0],
-                sa_previous_move=game.sa_previous_move,
-            )
-            return [[game.monsters[0], monster]]
-        except CppAlgorithmError:
-            return [limited_path(game.grid, game.monsters[0], game.human, 2)]
+        return [planned_sa_path(game)]
     raise ValueError(f"unsupported monster AI: {ai_name}")
+
+
+def planned_sa_path(game: GameState) -> List[Pos]:
+    start = game.monsters[0]
+    fallback = limited_path(game.grid, start, game.human, 2)
+    try:
+        _, monster = run_cpp_map_algorithm(
+            "sa",
+            game.grid,
+            game.human,
+            start,
+            sa_previous_move=game.sa_previous_move,
+        )
+    except CppAlgorithmError:
+        return fallback
+
+    if not valid_sa_destination(game.grid, start, monster, game.human):
+        return fallback
+    return [start, monster]
+
+
+def valid_sa_destination(
+    grid: Sequence[Sequence[int]],
+    start: Pos,
+    destination: Pos,
+    human: Pos,
+) -> bool:
+    if not is_floor(grid, destination):
+        return False
+    path = astar([list(row) for row in grid], start, destination)
+    if not path or len(path) - 1 > 2:
+        return False
+    can_advance_toward_human = len(limited_path(grid, start, human, 1)) > 1
+    if destination == start and start != human and can_advance_toward_human:
+        return False
+    return True
 
 
 def planned_astar_paths(game: GameState) -> List[List[Pos]]:
@@ -944,15 +971,9 @@ def move_monsters(game: GameState) -> List[Pos]:
     if ai_name == "minimax":
         return move_monsters_controller(game, "minimax")
     if ai_name == "sa":
-        previous_monster = game.monsters[0]
-        _, monster = run_cpp_map_algorithm(
-            "sa",
-            game.grid,
-            game.human,
-            game.monsters[0],
-            sa_previous_move=game.sa_previous_move,
-        )
-        remember_sa_move(game, previous_monster, monster)
+        path = planned_sa_path(game)
+        monster = path[-1]
+        remember_sa_move(game, game.monsters[0], monster)
         return [monster]
     raise ValueError(f"unsupported monster AI: {ai_name}")
 

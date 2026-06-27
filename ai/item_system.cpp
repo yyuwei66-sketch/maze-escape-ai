@@ -215,6 +215,7 @@ Position findSafeTeleportPosition(
             Position candidate = {r, c};
 
             if (!isWalkable(grid, candidate) || samePosition(candidate, player.pos)
+                || hazardField[r][c] == numeric_limits<int>::max()
                 || isMonsterHere(candidate, monsters)
                 || (items != nullptr && isItemHere(candidate, *items))
                 || (traps != nullptr && isItemHere(candidate, *traps))) {
