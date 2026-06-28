@@ -33,11 +33,9 @@ VALID_DIRECTIONS = {
 ESCAPE_AIS = {"astar", "greedy", "minimax", "sa"}
 CHASE_AI = "bfs"
 
-# ── Recording ─────────────────────────────────────────────────────────────────────
 REPLAY_LOG     = "replay_log.jsonl"
-PLAYER_HISTORY: Dict[str, List[str]] = defaultdict(list)  # game_id -> [dir, ...]
+PLAYER_HISTORY: Dict[str, List[str]] = defaultdict(list)
 
-# ── ML Predictor (lazy loading, falls back to old logic if model file doesn't exist) ────
 _ml_predictor = None
 
 def _get_predictor():
@@ -47,7 +45,7 @@ def _get_predictor():
             from ml_train import MLPredictor
             _ml_predictor = MLPredictor()
         except Exception:
-            _ml_predictor = None   # Keep None if model is not trained
+            _ml_predictor = None
     return _ml_predictor
 
 app = Flask(__name__)
@@ -196,34 +194,41 @@ def torus_manhattan(a: Pos, b: Pos, grid: Sequence[Sequence[int]]) -> int:
     return min(dr, h - dr) + min(dc, w - dc)
 
 
+def torus_relative(human_val: float, monster_val: float) -> float:
+    diff = human_val - monster_val
+    if diff > 0.5:
+        diff -= 1.0
+    elif diff < -0.5:
+        diff += 1.0
+    return diff
+
+
 def _log_step(game: GameState, direction: str) -> None:
-    """Record player move for training data"""
     grid    = game.grid
     human   = game.human
     monster = game.monsters[0]
-    history = PLAYER_HISTORY[game.game_id]   # History before this move
+    history = PLAYER_HISTORY[game.game_id]
     H, W    = len(grid), len(grid[0])
 
     feat: dict = {}
 
-    # Normalized positions
     feat["human_row"]   = human[0]   / H
     feat["human_col"]   = human[1]   / W
     feat["monster_row"] = monster[0] / H
     feat["monster_col"] = monster[1] / W
 
-    # Walls around player
+    feat["rel_row"] = torus_relative(feat["human_row"], feat["monster_row"])
+    feat["rel_col"] = torus_relative(feat["human_col"], feat["monster_col"])
+
     for d_name, (dr, dc) in VALID_DIRECTIONS.items():
         nr = (human[0] + dr) % H
         nc = (human[1] + dc) % W
         feat[f"wall_{d_name}"] = 0 if int(grid[nr][nc]) == 0 else 1
 
-    # Previous step direction (one-hot)
     prev1 = history[-1] if len(history) >= 1 else None
     for d in VALID_DIRECTIONS:
         feat[f"prev_{d}_1"] = 1 if prev1 == d else 0
 
-    # Second previous step direction (one-hot)
     prev2 = history[-2] if len(history) >= 2 else None
     for d in VALID_DIRECTIONS:
         feat[f"prev_{d}_2"] = 1 if prev2 == d else 0
@@ -232,7 +237,6 @@ def _log_step(game: GameState, direction: str) -> None:
     with open(REPLAY_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    # Update history after logging (so the record doesn't include this move)
     history.append(direction)
 
 
@@ -240,7 +244,7 @@ def apply_player_move(game: GameState, payload: dict[str, Any]) -> None:
     assert_running(game)
     if game.mode == "escape":
         direction = str(payload.get("direction", "")).lower()
-        _log_step(game, direction)                    # ← Recording
+        _log_step(game, direction)
         game.human = move_one(game.grid, game.human, direction)
         if not catches_human(game):
             game.monsters = move_monsters(game)
@@ -293,26 +297,21 @@ def move_monsters_astar(game: GameState) -> List[Pos]:
     d1 = torus_manhattan(m1, game.human, game.grid)
     d2 = torus_manhattan(m2, game.human, game.grid)
 
-    # Closer monster chases directly, farther monster uses ML to predict target
     if d1 <= d2:
-        chaser,    interceptor    = m1, m2
-        chaser_d,  intercept_d   = d1, d2
+        chaser,     interceptor    = m1, m2
+        chaser_d,   intercept_d   = d1, d2
     else:
-        chaser,    interceptor    = m2, m1
-        chaser_d,  intercept_d   = d2, d1
+        chaser,     interceptor    = m2, m1
+        chaser_d,   intercept_d   = d2, d1
 
-    # Monster 1 (closer): A* directly chases current position
     new_chaser = advance_along_path(game.grid, chaser, game.human, 2)
 
-    # Monster 2 (farther): Use ML to predict player position 3 steps ahead as intercept target
-    #   If model is not trained, fall back to original intercept_point
     predictor = _get_predictor()
     if predictor is not None:
         history = PLAYER_HISTORY.get(game.game_id, [])
         target  = predictor.predict_future_pos(
             game.grid, game.human, game.monsters[0], history, steps=3
         )
-        # If predicted point is a wall, fall back to intercept_point
         if not is_floor(game.grid, target):
             target = intercept_point(game.grid, chaser, game.human)
     else:
@@ -320,7 +319,6 @@ def move_monsters_astar(game: GameState) -> List[Pos]:
 
     new_interceptor = advance_along_path(game.grid, interceptor, target, 2)
 
-    # Keep original return order [m1 new position, m2 new position]
     if d1 <= d2:
         return [new_chaser, new_interceptor]
     return [new_interceptor, new_chaser]
