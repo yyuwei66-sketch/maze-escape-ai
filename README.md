@@ -20,7 +20,7 @@ Implemented:
 - Chase mode, where the player controls the monster and the human is controlled
   by BFS escape
 - Public AI package facade and C++ algorithm adapters in `ai/__init__.py`
-- Genetic Algorithm map generation in `ai/genetic_map.cpp`
+- Genetic Algorithm map generation in `map/generate_map.cpp`
 - A* monster pathfinding in `ai/astar.py`
 - BFS-based human escape step selection in `ai/bfs_escape.cpp`
 - Simulated Annealing monster movement in `ai/SA.cpp`
@@ -60,7 +60,7 @@ Present but still empty / placeholder:
 
 ### Genetic Algorithm Map Generation
 
-`ai/genetic_map.cpp` generates random candidate maps and improves them over
+`map/generate_map.cpp` generates random candidate maps and improves them over
 multiple generations. For every new game, Flask creates a 64-bit seed with
 Python's cryptographically secure `secrets` module and invokes the generator as
 `genetic_map --seed <seed>`. Supplying the same seed directly reproduces the
@@ -180,13 +180,13 @@ maze-escape-ai/
 │   ├── __init__.py       # AI package facade and C++ adapter helpers
 │   ├── astar.py          # A* pathfinding and two-monster movement helper
 │   ├── bfs_escape.cpp    # BFS-based human escape move
-│   ├── genetic_map.cpp   # Genetic Algorithm map generation
 │   ├── SA.cpp            # Simulated Annealing monster movement
 │   ├── greedy.py         # Greedy multi-monster chase controller
 │   └── minimax.py        # Minimax multi-monster chase controller
 ├── assets/
 │   └── fonts/            # bundled Munro font and license
 ├── map/
+│   ├── generate_map.cpp  # Genetic Algorithm map generation
 │   └── generated_map.txt # current generated map and coordinates
 ├── paper/
 │   ├── main.tex          # report source

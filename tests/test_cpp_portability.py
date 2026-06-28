@@ -21,6 +21,13 @@ class CppPortabilityTest(unittest.TestCase):
 
         self.assertEqual(target, ai.PACKAGE_DIR / "genetic_map")
 
+    def test_genetic_map_source_uses_current_repository_location(self):
+        self.assertEqual(
+            ai.GENETIC_MAP_SOURCE,
+            ai.REPOSITORY_DIR / "map" / "generate_map.cpp",
+        )
+        self.assertTrue(ai.GENETIC_MAP_SOURCE.exists())
+
     def test_find_cpp_compiler_prefers_cxx_environment_variable(self):
         with (
             patch.dict("os.environ", {"CXX": r"C:\tools\clang++.exe"}, clear=True),

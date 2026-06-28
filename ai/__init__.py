@@ -35,9 +35,10 @@ WIDTH = 30
 HEIGHT = 30
 
 PACKAGE_DIR = Path(__file__).resolve().parent
+REPOSITORY_DIR = PACKAGE_DIR.parent
 BFS_ESCAPE_SOURCE = PACKAGE_DIR / "bfs_escape.cpp"
 SA_SOURCE = PACKAGE_DIR / "SA.cpp"
-GENETIC_MAP_SOURCE = PACKAGE_DIR / "genetic_map.cpp"
+GENETIC_MAP_SOURCE = REPOSITORY_DIR / "map" / "generate_map.cpp"
 
 
 def _cpp_target_path(stem: str, platform_name: str | None = None) -> Path:
