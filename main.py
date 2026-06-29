@@ -62,7 +62,7 @@ ITEM_SYMBOLS = {
     "freeze_trap": "F",
     "invisibility_cloak": "C",
 }
-ITEM_SPAWN_COUNT = 2
+ITEM_SPAWN_COUNT = 4
 ITEM_SPAWN_INTERVAL = 10
 SPEED_BOOTS_DURATION = 5
 SPEED_BOOTS_STEPS_PER_TURN = 2
