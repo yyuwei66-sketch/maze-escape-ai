@@ -260,6 +260,26 @@ class FlaskGameTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(len(response.get_json()["monsters"]), 1)
 
+    def test_greedy_bfs_fallback_state_persists_after_blocked_greedy_step(self):
+        grid = [[0 for _ in range(5)] for _ in range(5)]
+        grid[2][1] = 1
+        game = main.GameState(
+            grid=grid,
+            human=(2, 0),
+            human_spawn=(2, 0),
+            monsters=[(2, 2)],
+            mode="escape",
+            opponent_ai="greedy",
+            monster_frozen_turns=[0],
+        )
+
+        first_path = main.planned_controller_paths(game, "greedy")
+        second_path = main.planned_controller_paths(game, "greedy")
+
+        self.assertEqual(first_path[0], [(2, 2), (2, 3), (2, 4)])
+        self.assertEqual(second_path[0], [(2, 2), (2, 3), (2, 4)])
+        self.assertEqual(game.greedy_bfs_fallback_steps, [3])
+
     def test_sa_game_starts_without_previous_move(self):
         response = self.make_game({"mode": "escape", "opponent_ai": "sa"})
         game_id = response.get_json()["game_id"]

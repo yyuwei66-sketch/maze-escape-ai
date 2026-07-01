@@ -126,6 +126,7 @@ class GameState:
     waiting_for_second_step: bool = False
     player_turn_new_effects: set[ItemKind] = field(default_factory=set)
     last_monster_paths: List[List[Pos]] = field(default_factory=list)
+    greedy_bfs_fallback_steps: List[int] = field(default_factory=list)
     sa_previous_move: Tuple[Pos, Pos] | None = None
     bfs_previous_human: Pos | None = None
     game_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -948,6 +949,7 @@ def planned_controller_paths(game: GameState, controller_name: str) -> List[List
             allow_stay=False,
             avoid_stacking=True,
         )
+        ctrl.set_bfs_fallback_steps(game.greedy_bfs_fallback_steps)
     else:
         ctrl = make_minimax_controller(
             walls,
@@ -959,6 +961,8 @@ def planned_controller_paths(game: GameState, controller_name: str) -> List[List
             monster_can_stay=False,
         )
     paths = ctrl.decide(human_xy, monsters_xy)
+    if controller_name == "greedy":
+        game.greedy_bfs_fallback_steps = ctrl.bfs_fallback_steps(len(monsters_xy))
     return [many_xy_to_row_col(path) for path in paths]
 
 
@@ -1117,6 +1121,7 @@ def move_monsters_controller(game: GameState, controller_name: str) -> List[Pos]
             allow_stay=False,
             avoid_stacking=True,
         )
+        ctrl.set_bfs_fallback_steps(game.greedy_bfs_fallback_steps)
     else:
         ctrl = make_minimax_controller(
             walls,
@@ -1128,6 +1133,8 @@ def move_monsters_controller(game: GameState, controller_name: str) -> List[Pos]
             monster_can_stay=False,
         )
     paths = ctrl.decide(human_xy, monsters_xy)
+    if controller_name == "greedy":
+        game.greedy_bfs_fallback_steps = ctrl.bfs_fallback_steps(len(monsters_xy))
     return many_xy_to_row_col(path[-1] for path in paths)
 
 

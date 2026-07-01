@@ -7,6 +7,7 @@ import random
 Pos = Tuple[int, int]
 
 _DIRS: Tuple[Tuple[int, int], ...] = ((1, 0), (-1, 0), (0, 1), (0, -1))
+_BFS_FALLBACK_STEPS = 7
 
 __all__ = ["TorusGrid", "GreedyMonsterAI", "make_greedy_controller",
            "make_greedy_controller_from_map", "pick_monster_spawns"]
@@ -91,9 +92,19 @@ class GreedyMonsterAI:
         self.avoid_stacking = avoid_stacking
         self.rng = rng or random.Random(0)
         self._prev: Dict[int, int] = {}          # last cell per monster (anti-jitter)
+        self._bfs_fallback: Dict[int, int] = {}
 
     def set_walls(self, walls: Iterable[Pos]) -> None:
         self.g.set_walls(walls)
+
+    def set_bfs_fallback_steps(self, remaining: Sequence[int]) -> None:
+        self._bfs_fallback = {
+            index: max(0, int(value))
+            for index, value in enumerate(remaining)
+        }
+
+    def bfs_fallback_steps(self, count: int) -> List[int]:
+        return [max(0, self._bfs_fallback.get(index, 0)) for index in range(count)]
 
     def decide(self, player_pos: Pos,
                monster_positions: Sequence[Pos]) -> List[List[Pos]]:
@@ -120,7 +131,7 @@ class GreedyMonsterAI:
         return paths
 
     def _best_step(self, cur: int, p_idx: int, occupied: set, mi: int) -> int:
-        """Manhattan-only greedy step. BFS is NOT used for the decision."""
+        """Prefer Manhattan greedy; use short BFS fallback when blocked."""
         g = self.g
         p = g.coord(p_idx)
 
@@ -135,6 +146,10 @@ class GreedyMonsterAI:
         prev = self._prev.get(mi)
         non_back = [j for j in cands if j != prev] or cands
 
+        if self._bfs_fallback.get(mi, 0) > 0:
+            self._bfs_fallback[mi] -= 1
+            return self._best_bfs_step(non_back, p_idx, occupied)
+
         # core: rank by toroidal Manhattan distance only (+ anti-stacking)
         def dist(j: int) -> int:
             return g.toroidal_manhattan(g.coord(j), p)
@@ -143,13 +158,37 @@ class GreedyMonsterAI:
             penalty = 1 if (j in occupied and j != p_idx) else 0
             return (dist(j), penalty)
 
-        best_key = min(key(j) for j in non_back)
-        best_cands = [j for j in non_back if key(j) == best_key]
+        current_dist = dist(cur)
+        progress = [j for j in non_back if j == p_idx or dist(j) < current_dist]
+        if not progress:
+            self._bfs_fallback[mi] = _BFS_FALLBACK_STEPS - 1
+            return self._best_bfs_step(non_back, p_idx, occupied)
+
+        best_key = min(key(j) for j in progress)
+        best_cands = [j for j in progress if key(j) == best_key]
 
         if len(best_cands) == 1:
             return best_cands[0]
         # rule 2: on a tie, take the neighbour that most points at the player
         return self._prefer_toward(best_cands, cur, p_idx)
+
+    def _best_bfs_step(self, cands: List[int], p_idx: int, occupied: set) -> int:
+        g = self.g
+        field = g.distance_field(g.coord(p_idx))
+        reachable = [j for j in cands if field[j] >= 0]
+        if not reachable:
+            open_cands = [j for j in cands if j not in occupied] or cands
+            return self.rng.choice(open_cands)
+
+        def key(j: int) -> Tuple[int, int]:
+            penalty = 1 if (j in occupied and j != p_idx) else 0
+            return (field[j], penalty)
+
+        best_key = min(key(j) for j in reachable)
+        best_cands = [j for j in reachable if key(j) == best_key]
+        if len(best_cands) == 1:
+            return best_cands[0]
+        return self.rng.choice(best_cands)
 
     def _prefer_toward(self, cands: List[int], cur: int, p_idx: int) -> int:
         g = self.g

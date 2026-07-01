@@ -141,13 +141,22 @@ def ai_astar(grid, human: Pos, monsters: List[Pos]) -> Tuple[List[Pos], float]:
     t0 = time.perf_counter()
     return [_adv(grid, monsters[0], human, 2)], time.perf_counter()-t0
 
-def ai_greedy(grid, human: Pos, monsters: List[Pos]) -> Tuple[List[Pos], float]:
+def ai_greedy(
+    grid,
+    human: Pos,
+    monsters: List[Pos],
+    bfs_fallback_steps: Optional[List[int]] = None,
+) -> Tuple[List[Pos], float]:
     if not HAS_AI: return ai_astar(grid, human, monsters)
     t0 = time.perf_counter()
     ctrl = make_greedy_controller(
         walls_from_grid(grid), width=len(grid[0]), height=len(grid),
         steps_per_turn=2, allow_stay=False, avoid_stacking=True)
+    if bfs_fallback_steps is not None:
+        ctrl.set_bfs_fallback_steps(bfs_fallback_steps)
     paths = ctrl.decide((human[1], human[0]), many_row_col_to_xy(monsters))
+    if bfs_fallback_steps is not None:
+        bfs_fallback_steps[:] = ctrl.bfs_fallback_steps(len(monsters))
     return list(many_xy_to_row_col(p[-1] for p in paths)), time.perf_counter()-t0
 
 def ai_minimax(grid, human: Pos, monsters: List[Pos]) -> Tuple[List[Pos], float]:
@@ -195,6 +204,7 @@ def simulate(grid, human: Pos, monsters: List[Pos], fn) -> GameResult:
     H, W = len(grid), len(grid[0])
     step_times: List[float] = []
     sa_previous_move: Optional[Tuple[Pos, Pos]] = None
+    greedy_bfs_fallback_steps: List[int] = []
     for step in range(1, MAX_STEPS+1):
         if human in monsters:
             return GameResult(step-1, True, step_times)
@@ -213,6 +223,13 @@ def simulate(grid, human: Pos, monsters: List[Pos], fn) -> GameResult:
                 human,
                 monsters,
                 sa_previous_move=sa_previous_move,
+            )
+        elif fn is ai_greedy:
+            new_m, dt = fn(
+                grid,
+                human,
+                monsters,
+                bfs_fallback_steps=greedy_bfs_fallback_steps,
             )
         else:
             new_m, dt = fn(grid, human, monsters)
