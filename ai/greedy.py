@@ -90,6 +90,7 @@ class GreedyMonsterAI:
         self.allow_stay = allow_stay
         self.avoid_stacking = avoid_stacking
         self.rng = rng or random.Random(0)
+        self._prev: Dict[int, int] = {}          # last cell per monster (anti-jitter)
 
     def set_walls(self, walls: Iterable[Pos]) -> None:
         self.g.set_walls(walls)
@@ -97,19 +98,20 @@ class GreedyMonsterAI:
     def decide(self, player_pos: Pos,
                monster_positions: Sequence[Pos]) -> List[List[Pos]]:
         g = self.g
-        field = g.distance_field(player_pos)
         p_idx = g.index(player_pos)
         occupied = ({g.index(m) for m in monster_positions}
                     if self.avoid_stacking else set())
         paths: List[List[Pos]] = []
-        for m in monster_positions:
+        for mi, m in enumerate(monster_positions):
             cur = g.index(m)
             occupied.discard(cur)
             path = [g.coord(cur)]
             for _ in range(self.steps):
                 if cur == p_idx:
                     break
-                cur = self._best_step(cur, p_idx, field, occupied)
+                nxt = self._best_step(cur, p_idx, occupied, mi)
+                self._prev[mi] = cur             # remember where we came from
+                cur = nxt
                 path.append(g.coord(cur))
                 if cur == p_idx:
                     break
@@ -117,23 +119,64 @@ class GreedyMonsterAI:
             paths.append(path)
         return paths
 
-    def _best_step(self, cur: int, p_idx: int,
-                   field: List[int], occupied: set) -> int:
+    def _best_step(self, cur: int, p_idx: int, occupied: set, mi: int) -> int:
+        """Manhattan-only greedy step. BFS is NOT used for the decision."""
         g = self.g
+        p = g.coord(p_idx)
+
+        # legal neighbours (adj already excludes walls)
         cands = list(g.adj[cur])
         if self.allow_stay:
             cands.append(cur)
-        best = cur
-        best_key = (10 ** 18, 1)
-        for j in cands:
-            d = field[j]
-            if d < 0:
-                d = 10 ** 6 + g.toroidal_manhattan(g.coord(j), g.coord(p_idx))
+        if not cands:
+            return cur                            # rule 3: walled in -> stay
+
+        # rule 1: avoid stepping straight back to the previous cell
+        prev = self._prev.get(mi)
+        non_back = [j for j in cands if j != prev] or cands
+
+        # core: rank by toroidal Manhattan distance only (+ anti-stacking)
+        def dist(j: int) -> int:
+            return g.toroidal_manhattan(g.coord(j), p)
+
+        def key(j: int) -> Tuple[int, int]:
             penalty = 1 if (j in occupied and j != p_idx) else 0
-            key = (d, penalty)
-            if key < best_key:
-                best_key, best = key, j
-        return best
+            return (dist(j), penalty)
+
+        best_key = min(key(j) for j in non_back)
+        best_cands = [j for j in non_back if key(j) == best_key]
+
+        if len(best_cands) == 1:
+            return best_cands[0]
+        # rule 2: on a tie, take the neighbour that most points at the player
+        return self._prefer_toward(best_cands, cur, p_idx)
+
+    def _prefer_toward(self, cands: List[int], cur: int, p_idx: int) -> int:
+        g = self.g
+        W, H = g.w, g.h
+        cx, cy = g.coord(cur)
+        px, py = g.coord(p_idx)
+
+        def signed(delta: int, size: int) -> int:
+            if delta > size // 2:
+                delta -= size
+            if delta < -size // 2:
+                delta += size
+            return delta
+
+        tx, ty = signed(px - cx, W), signed(py - cy, H)
+
+        def score(j: int) -> int:
+            jx, jy = g.coord(j)
+            mx, my = signed(jx - cx, W), signed(jy - cy, H)
+            s = 0
+            if mx * tx > 0:
+                s += abs(tx)
+            if my * ty > 0:
+                s += abs(ty)
+            return s
+
+        return max(cands, key=score)
 
 
 def make_greedy_controller(walls: Iterable[Pos] = (),
